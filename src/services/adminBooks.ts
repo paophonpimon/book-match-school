@@ -1,6 +1,7 @@
 export const ADMIN_EMAIL = 'paopornpimon@gmail.com'
 export const ADMIN_BOOKS_CACHE_KEY = 'book-match-admin-books-firestore-v1'
 export const ADMIN_PAGE_SIZE = 20
+export const retiredBookFields = ['estimatedReadingMinutes', 'displayOrder'] as const
 
 export const adminMoodOptions = [
   'อยากลุ้น',
@@ -62,10 +63,8 @@ export interface AdminBook {
   moods: string[]
   readingLevel: string
   recommendedGrades: string
-  estimatedReadingMinutes: number | null
   matchReason: string
   active: boolean
-  displayOrder: number
 }
 
 export type AdminBookInput = Omit<AdminBook, 'id'>
@@ -83,11 +82,6 @@ function asText(value: unknown) {
   return value == null ? '' : String(value).trim()
 }
 
-function asNumber(value: unknown, fallback = 0) {
-  const number = Number(value)
-  return Number.isFinite(number) ? number : fallback
-}
-
 function asBoolean(value: unknown, fallback = true) {
   if (value === '' || value == null) return fallback
   if (typeof value === 'boolean') return value
@@ -102,7 +96,7 @@ export function splitAdminList(value: unknown) {
     .filter(Boolean)
 }
 
-export function normalizeAdminBook(value: unknown, index = 0): AdminBook {
+export function normalizeAdminBook(value: unknown): AdminBook {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return {
     id: asText(source.id || source.bookId || source.book_id),
@@ -119,13 +113,19 @@ export function normalizeAdminBook(value: unknown, index = 0): AdminBook {
     moods: splitAdminList(source.moods || source.mood_tags),
     readingLevel: asText(source.readingLevel || source.reading_level),
     recommendedGrades: asText(source.recommendedGrades || source.recommended_grades),
-    estimatedReadingMinutes: source.estimatedReadingMinutes == null || source.estimatedReadingMinutes === ''
-      ? null
-      : asNumber(source.estimatedReadingMinutes),
     matchReason: asText(source.matchReason || source.match_reason),
     active: asBoolean(source.active, true),
-    displayOrder: asNumber(source.displayOrder || source.display_order, index + 1),
   }
+}
+
+export function compareAdminBooks(left: AdminBook, right: AdminBook) {
+  return left.categoryCode.localeCompare(right.categoryCode, 'th-TH', { numeric: true })
+    || left.title.localeCompare(right.title, 'th-TH', { numeric: true, sensitivity: 'base' })
+    || left.id.localeCompare(right.id, 'en-US')
+}
+
+export function sortAdminBooks(books: AdminBook[]) {
+  return [...books].sort(compareAdminBooks)
 }
 
 export function validateAdminBook(book: AdminBookInput) {
@@ -145,10 +145,6 @@ export function validateAdminBook(book: AdminBookInput) {
   if (book.moods.some((mood) => !adminMoodOptions.includes(mood as typeof adminMoodOptions[number]))) {
     return 'มีอารมณ์ที่ไม่อยู่ในรายการที่อนุญาต'
   }
-  if (book.estimatedReadingMinutes != null && book.estimatedReadingMinutes < 0) {
-    return 'เวลาอ่านโดยประมาณต้องไม่ติดลบ'
-  }
-  if (book.displayOrder < 0) return 'ลำดับการแสดงต้องไม่ติดลบ'
   for (const [label, url] of [['URL รูปปก', book.coverUrl], ['URL เสียงอ่าน', book.audioUrl]] as const) {
     if (!url.trim()) continue
     try {
@@ -182,10 +178,8 @@ export function cleanAdminBookInput(book: AdminBookInput): AdminBookInput {
     moods: book.moods.map((mood) => mood.trim()).filter(Boolean),
     readingLevel: book.readingLevel.trim(),
     recommendedGrades: book.recommendedGrades.trim(),
-    estimatedReadingMinutes: book.estimatedReadingMinutes,
     matchReason: book.matchReason.trim(),
     active: book.active,
-    displayOrder: Math.trunc(book.displayOrder),
   }
 }
 
@@ -251,4 +245,3 @@ export function calculateAdminBookStats(books: AdminBook[]): AdminBookStats {
     byCategory: [...categoryCounts.entries()].map(([categoryCode, count]) => ({ categoryCode, count })),
   }
 }
-

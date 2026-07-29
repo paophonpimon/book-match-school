@@ -912,8 +912,8 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll([
           'id', 'title', 'author', 'categoryCode', 'category', 'description',
           'coverUrl', 'audioUrl', 'isbn', 'callNumber', 'tags', 'moods',
-          'readingLevel', 'recommendedGrades', 'estimatedReadingMinutes',
-          'matchReason', 'active', 'displayOrder', 'normalizedTitle',
+          'readingLevel', 'recommendedGrades', 'matchReason', 'active',
+          'normalizedTitle',
           'normalizedAuthor', 'normalizedTitleAuthor', 'bookUniqueKey',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'lastAuditId'
         ])
@@ -941,14 +941,9 @@ service cloud.firestore {
         && request.resource.data.readingLevel.size() <= 120
         && request.resource.data.recommendedGrades is string
         && request.resource.data.recommendedGrades.size() <= 120
-        && (request.resource.data.estimatedReadingMinutes == null
-          || (request.resource.data.estimatedReadingMinutes is int
-            && request.resource.data.estimatedReadingMinutes >= 0))
         && request.resource.data.matchReason is string
         && request.resource.data.matchReason.size() <= 1000
         && request.resource.data.active is bool
-        && request.resource.data.displayOrder is int
-        && request.resource.data.displayOrder >= 0
         && shortText(request.resource.data.normalizedTitle, 1, 300)
         && shortText(request.resource.data.normalizedAuthor, 1, 300)
         && request.resource.data.normalizedTitleAuthor
@@ -965,8 +960,8 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
           'id', 'title', 'author', 'categoryCode', 'category', 'description',
           'coverUrl', 'audioUrl', 'isbn', 'callNumber', 'tags', 'moods',
-          'readingLevel', 'recommendedGrades', 'estimatedReadingMinutes',
-          'matchReason', 'active', 'displayOrder', 'normalizedTitle',
+          'readingLevel', 'recommendedGrades', 'matchReason', 'active',
+          'normalizedTitle',
           'normalizedAuthor', 'normalizedTitleAuthor', 'bookUniqueKey',
           'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'lastAuditId'
         ])
@@ -976,17 +971,19 @@ service cloud.firestore {
 
     function validBookUpdateFields() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let createdAtValid = (resource.data.createdAt is timestamp)
-        ? request.resource.data.createdAt == resource.data.createdAt
+      let previousCreatedAt = resource.data.get('createdAt', null);
+      let previousCreatedBy = resource.data.get('createdBy', null);
+      let createdAtValid = (previousCreatedAt is timestamp)
+        ? request.resource.data.createdAt == previousCreatedAt
         : request.resource.data.createdAt == request.time;
-      let createdByValid = (resource.data.createdBy is string)
-        ? request.resource.data.createdBy == resource.data.createdBy
+      let createdByValid = (previousCreatedBy is string)
+        ? request.resource.data.createdBy == previousCreatedBy
         : request.resource.data.createdBy == request.auth.uid;
       return changed.hasOnly([
           'title', 'author', 'categoryCode', 'category', 'description', 'coverUrl',
           'audioUrl', 'isbn', 'callNumber', 'tags', 'moods', 'readingLevel',
-          'recommendedGrades', 'estimatedReadingMinutes', 'matchReason', 'active',
-          'displayOrder', 'normalizedTitle', 'normalizedAuthor',
+          'recommendedGrades', 'matchReason', 'active', 'normalizedTitle',
+          'normalizedAuthor',
           'normalizedTitleAuthor', 'bookUniqueKey', 'createdAt', 'createdBy',
           'updatedAt', 'updatedBy', 'lastAuditId'
         ])
@@ -1011,8 +1008,8 @@ service cloud.firestore {
       let audit = getAfter(auditPath).data;
       let beforeKeyValid = isCreate
         ? audit.beforeUniqueKey == null
-        : (!(resource.data.bookUniqueKey is string)
-          || audit.beforeUniqueKey == resource.data.bookUniqueKey);
+        : (!(resource.data.get('bookUniqueKey', null) is string)
+          || audit.beforeUniqueKey == resource.data.get('bookUniqueKey', null));
       let actionValid = isCreate
         ? audit.action == 'create'
         : (audit.action == 'update'
@@ -1115,8 +1112,9 @@ service cloud.firestore {
         && request.resource.data.beforeUniqueKey == null;
       let existingTransition = exists(bookPath)
         && request.resource.data.beforeActive == get(bookPath).data.active
-        && (!(get(bookPath).data.bookUniqueKey is string)
-          || request.resource.data.beforeUniqueKey == get(bookPath).data.bookUniqueKey)
+        && (!(get(bookPath).data.get('bookUniqueKey', null) is string)
+          || request.resource.data.beforeUniqueKey
+            == get(bookPath).data.get('bookUniqueKey', null))
         && (request.resource.data.action == 'update'
           || (request.resource.data.action == 'archive'
             && get(bookPath).data.active == true
@@ -1165,4 +1163,3 @@ service cloud.firestore {
     }
   }
 }
-

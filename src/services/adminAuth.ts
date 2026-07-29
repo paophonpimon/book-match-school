@@ -13,39 +13,29 @@ import {
 import {
   collection,
   doc,
-  documentId,
-  getCountFromServer,
   getDocs,
   getDocsFromCache,
   getFirestore,
   initializeFirestore,
-  limit,
-  orderBy,
   persistentLocalCache,
   persistentMultipleTabManager,
   query,
   runTransaction,
   serverTimestamp,
-  startAfter,
   Timestamp,
-  where,
   type Firestore,
-  type QueryConstraint,
-  type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import {
   ADMIN_EMAIL,
-  ADMIN_PAGE_SIZE,
   changedAdminBookFields,
   cleanAdminBookInput,
   normalizeAdminBook,
   normalizeBookIdentity,
+  sortAdminBooks,
   validateAdminBook,
   type AdminBook,
   type AdminBookInput,
   type AdminBookMutationAction,
-  type AdminBookStats,
-  type AdminBookStatusFilter,
 } from './adminBooks'
 import { env, firebaseConfigured } from './env'
 
@@ -125,74 +115,22 @@ export async function getVerifiedAdminFirebaseContext() {
   return context
 }
 
-export interface AdminBooksPageOptions {
-  status: AdminBookStatusFilter
-  categoryCode: string
-  cursor?: QueryDocumentSnapshot | null
+export interface AdminBooksListOptions {
   source?: 'cache' | 'server'
 }
 
-export interface AdminBooksPage {
-  books: AdminBook[]
-  cursor: QueryDocumentSnapshot | null
-  hasMore: boolean
+function buildListQuery() {
+  return query(collection(adminContext().firestore, 'books'))
 }
 
-function buildPageQuery(options: AdminBooksPageOptions) {
-  const constraints: QueryConstraint[] = []
-  if (options.categoryCode) constraints.push(where('categoryCode', '==', options.categoryCode))
-  if (options.status !== 'all') constraints.push(where('active', '==', options.status === 'active'))
-  constraints.push(orderBy('displayOrder', 'asc'), orderBy(documentId(), 'asc'))
-  if (options.cursor) constraints.push(startAfter(options.cursor))
-  constraints.push(limit(ADMIN_PAGE_SIZE + 1))
-  return query(collection(adminContext().firestore, 'books'), ...constraints)
-}
-
-export function listBooksAsAdmin(options: AdminBooksPageOptions) {
+export function listBooksAsAdmin(options: AdminBooksListOptions = {}) {
   return Promise.resolve().then(async () => {
     const snapshot = options.source === 'cache'
-      ? await getDocsFromCache(buildPageQuery(options))
-      : await getDocs(buildPageQuery(options))
-    const visible = snapshot.docs.slice(0, ADMIN_PAGE_SIZE)
-    return {
-      books: visible.map((item) => normalizeAdminBook({ id: item.id, ...item.data() })),
-      cursor: visible.at(-1) ?? null,
-      hasMore: snapshot.docs.length > ADMIN_PAGE_SIZE,
-    } satisfies AdminBooksPage
-  })
-}
-
-export function loadAdminBookStats() {
-  return Promise.resolve().then(async () => {
-    const books = collection(adminContext().firestore, 'books')
-    const categoryCodes = Array.from({ length: 10 }, (_, index) => String(index * 100).padStart(3, '0'))
-    const [total, active, hidden, ...categories] = await Promise.all([
-      getCountFromServer(query(books)),
-      getCountFromServer(query(books, where('active', '==', true))),
-      getCountFromServer(query(books, where('active', '==', false))),
-      ...categoryCodes.map((categoryCode) => getCountFromServer(query(books, where('categoryCode', '==', categoryCode)))),
-    ])
-    return {
-      total: total.data().count,
-      active: active.data().count,
-      hidden: hidden.data().count,
-      byCategory: categoryCodes.map((categoryCode, index) => ({
-        categoryCode,
-        count: categories[index].data().count,
-      })),
-    } satisfies AdminBookStats
-  })
-}
-
-export function loadAdminFilteredCount(status: AdminBookStatusFilter, categoryCode: string) {
-  return Promise.resolve().then(async () => {
-    const constraints: QueryConstraint[] = []
-    if (categoryCode) constraints.push(where('categoryCode', '==', categoryCode))
-    if (status !== 'all') constraints.push(where('active', '==', status === 'active'))
-    const snapshot = await getCountFromServer(
-      query(collection(adminContext().firestore, 'books'), ...constraints),
+      ? await getDocsFromCache(buildListQuery())
+      : await getDocs(buildListQuery())
+    return sortAdminBooks(
+      snapshot.docs.map((item) => normalizeAdminBook({ id: item.id, ...item.data() })),
     )
-    return snapshot.data().count
   })
 }
 
@@ -202,12 +140,30 @@ export async function buildBookUniqueKey(title: string, author: string) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+export async function planBookIdentityMutation(
+  previousBook: Pick<AdminBook, 'title' | 'author'> | null,
+  nextBook: Pick<AdminBookInput, 'title' | 'author'>,
+  storedPreviousUniqueKey: unknown,
+) {
+  const nextUniqueKey = await buildBookUniqueKey(nextBook.title, nextBook.author)
+  const previousUniqueKey = typeof storedPreviousUniqueKey === 'string'
+    ? storedPreviousUniqueKey
+    : previousBook
+      ? await buildBookUniqueKey(previousBook.title, previousBook.author)
+      : null
+  return {
+    previousUniqueKey,
+    nextUniqueKey,
+    rotatesUniqueKey: previousUniqueKey !== null && previousUniqueKey !== nextUniqueKey,
+  }
+}
+
 async function mutateBook(
   action: AdminBookMutationAction,
   requestedBookId: string | null,
   requestedInput: AdminBookInput | null,
 ) {
-  const { user, firestore } = adminContext()
+  const { user, firestore } = await getVerifiedAdminFirebaseContext()
   const bookRef = requestedBookId
     ? doc(firestore, 'books', requestedBookId)
     : doc(collection(firestore, 'books'))
@@ -239,10 +195,11 @@ async function mutateBook(
 
     const normalizedTitle = normalizeBookIdentity(nextInput.title)
     const normalizedAuthor = normalizeBookIdentity(nextInput.author)
-    const nextUniqueKey = await buildBookUniqueKey(nextInput.title, nextInput.author)
-    const previousUniqueKey = previousBook
-      ? await buildBookUniqueKey(previousBook.title, previousBook.author)
-      : null
+    const { nextUniqueKey, previousUniqueKey } = await planBookIdentityMutation(
+      previousBook,
+      nextInput,
+      previousData?.bookUniqueKey,
+    )
     const nextUniqueRef = doc(firestore, 'bookUniqueKeys', nextUniqueKey)
     const previousUniqueRef = previousUniqueKey && previousUniqueKey !== nextUniqueKey
       ? doc(firestore, 'bookUniqueKeys', previousUniqueKey)
@@ -318,4 +275,3 @@ export function archiveBookAsAdmin(bookId: string) {
 export function restoreBookAsAdmin(bookId: string) {
   return mutateBook('restore', bookId, null).then(() => undefined)
 }
-

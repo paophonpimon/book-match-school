@@ -5,11 +5,14 @@ import {
   calculateAdminBookStats,
   changedAdminBookFields,
   cleanAdminBookInput,
+  compareAdminBooks,
   filterAdminBooks,
   isDuplicateAdminBook,
   normalizeAdminBook,
   normalizeBookIdentity,
   paginateAdminBooks,
+  retiredBookFields,
+  sortAdminBooks,
   type AdminBook,
   type AdminBookInput,
   validateAdminBook,
@@ -29,10 +32,8 @@ const book: AdminBookInput = {
   moods: ['อยากขำ', 'อยากผ่อนคลาย'],
   readingLevel: 'ปานกลาง',
   recommendedGrades: 'ม.1-ม.6',
-  estimatedReadingMinutes: 20,
   matchReason: 'เหมาะกับผู้อ่าน',
   active: true,
-  displayOrder: 12,
 }
 
 describe('Admin book schema and list utilities', () => {
@@ -84,13 +85,40 @@ describe('Admin book schema and list utilities', () => {
       ...book,
       title: '  หนังสือทดสอบ  ',
       tags: [' หนึ่ง ', '', 'สอง'],
-      displayOrder: 12.8,
     })
     expect(cleaned.title).toBe('หนังสือทดสอบ')
     expect(cleaned.tags).toEqual(['หนึ่ง', 'สอง'])
-    expect(cleaned.displayOrder).toBe(12)
     expect(changedAdminBookFields(book, { ...book, active: false })).toEqual(['active'])
     expect(changedAdminBookFields(null, book)).toContain('title')
+  })
+
+  it('ignores retired fields on legacy documents and never adds them to save payloads', () => {
+    const legacy = normalizeAdminBook({
+      id: 'legacy-book',
+      ...book,
+      estimatedReadingMinutes: 45,
+      displayOrder: 7,
+      migrationSource: 'google-sheets-apps-script-v1',
+    })
+    expect(legacy).not.toHaveProperty('estimatedReadingMinutes')
+    expect(legacy).not.toHaveProperty('displayOrder')
+    expect(retiredBookFields).toEqual(['estimatedReadingMinutes', 'displayOrder'])
+    expect(cleanAdminBookInput(legacy)).not.toHaveProperty('estimatedReadingMinutes')
+    expect(cleanAdminBookInput(legacy)).not.toHaveProperty('displayOrder')
+    expect(validateAdminBook(cleanAdminBookInput(legacy))).toBeNull()
+  })
+
+  it('orders by category, locale-aware title, and bookId before pagination', () => {
+    const unordered = [
+      normalizeAdminBook({ id: 'z-1', title: 'ขนมไทย', categoryCode: '100', active: true }),
+      normalizeAdminBook({ id: 'b-2', title: 'กระต่าย', categoryCode: '100', active: true }),
+      normalizeAdminBook({ id: 'a-2', title: 'กระต่าย', categoryCode: '100', active: true }),
+      normalizeAdminBook({ id: 'y-0', title: 'สวัสดี', categoryCode: '000', active: true }),
+    ]
+    expect(sortAdminBooks(unordered).map((item) => item.id)).toEqual(['y-0', 'a-2', 'b-2', 'z-1'])
+    expect(sortAdminBooks([...unordered].reverse()).map((item) => item.id))
+      .toEqual(sortAdminBooks(unordered).map((item) => item.id))
+    expect(compareAdminBooks(unordered[2], unordered[1])).toBeLessThan(0)
   })
 
   it('calculates active, hidden and category counts', () => {
@@ -112,7 +140,7 @@ describe('Admin book schema and list utilities', () => {
       author: index === 22 ? 'แซงเต็ก-ซูเปรี' : 'ผู้เขียน',
       categoryCode: index % 2 ? '000' : '100',
       active: index !== 22,
-    }, index))
+    }))
     expect(filterAdminBooks(books, 'เจ้าชาย', '', 'all')).toHaveLength(1)
     expect(filterAdminBooks(books, 'แซงเต็ก', '', 'hidden')).toHaveLength(1)
     expect(filterAdminBooks(books, '', '000', 'all').every((item) => item.categoryCode === '000')).toBe(true)
@@ -121,4 +149,3 @@ describe('Admin book schema and list utilities', () => {
     expect(paginateAdminBooks(books, 3).books).toHaveLength(5)
   })
 })
-

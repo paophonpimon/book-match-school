@@ -18,13 +18,11 @@ export interface Book {
   callNumber?: string
   readingLevel?: string
   recommendedGrades?: string
-  estimatedReadingMinutes?: number | null
   matchReason?: string
   shelfCode: string
   shelfDescription: string
   featured: boolean
   active: boolean
-  displayOrder: number
   popularity: number
   accent: string
 }
@@ -191,4 +189,3 @@ export interface BookLoanLock {
   updatedAt: string
   lastAuditId: string
 }
-

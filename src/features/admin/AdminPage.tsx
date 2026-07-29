@@ -18,13 +18,13 @@ import {
   UsersRound,
 } from 'lucide-react'
 import type { User } from 'firebase/auth'
-import type { QueryDocumentSnapshot } from 'firebase/firestore'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand } from '../../components/Brand'
 import {
   ADMIN_EMAIL,
-  ADMIN_PAGE_SIZE,
+  calculateAdminBookStats,
   filterAdminBooks,
+  paginateAdminBooks,
   type AdminBook,
   type AdminBookStats,
   type AdminBookStatusFilter,
@@ -32,8 +32,6 @@ import {
 import {
   archiveBookAsAdmin,
   listBooksAsAdmin,
-  loadAdminBookStats,
-  loadAdminFilteredCount,
   restoreBookAsAdmin,
   signInAdminWithGoogle,
   signOutAdmin,
@@ -65,7 +63,6 @@ export function AdminPage() {
   const [authError, setAuthError] = useState('')
   const [books, setBooks] = useState<AdminBook[]>([])
   const [stats, setStats] = useState<AdminBookStats>(emptyStats)
-  const [totalFiltered, setTotalFiltered] = useState(0)
   const [loadingBooks, setLoadingBooks] = useState(false)
   const [refreshingBooks, setRefreshingBooks] = useState(false)
   const [booksError, setBooksError] = useState('')
@@ -75,9 +72,6 @@ export function AdminPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<AdminBookStatusFilter>('all')
   const [page, setPage] = useState(1)
-  const [pageStartCursors, setPageStartCursors] = useState<Array<QueryDocumentSnapshot | null>>([null])
-  const [pageEndCursor, setPageEndCursor] = useState<QueryDocumentSnapshot | null>(null)
-  const [hasMore, setHasMore] = useState(false)
   const [mutatingId, setMutatingId] = useState('')
   const [activeSection, setActiveSection] = useState<AdminSection>('dashboard')
   const navigationTargetRef = useRef<AdminSection | null>(null)
@@ -87,42 +81,29 @@ export function AdminPage() {
     if (showFullLoading) setLoadingBooks(true)
     else setRefreshingBooks(true)
     setBooksError('')
-    const options = {
-      status: statusFilter,
-      categoryCode: categoryFilter,
-      cursor: pageStartCursors[page - 1] ?? null,
-    }
     try {
       if (preferCache) {
         try {
-          const cached = await listBooksAsAdmin({ ...options, source: 'cache' })
-          if (cached.books.length) {
-            setBooks(cached.books)
-            setPageEndCursor(cached.cursor)
-            setHasMore(cached.hasMore)
+          const cached = await listBooksAsAdmin({ source: 'cache' })
+          if (cached.length) {
+            setBooks(cached)
+            setStats(calculateAdminBookStats(cached))
             setLoadingBooks(false)
           }
         } catch {
           // Firestore cache can be empty on the first visit; the server read below remains authoritative.
         }
       }
-      const [server, nextStats, count] = await Promise.all([
-        listBooksAsAdmin({ ...options, source: 'server' }),
-        loadAdminBookStats(),
-        loadAdminFilteredCount(statusFilter, categoryFilter),
-      ])
-      setBooks(server.books)
-      setPageEndCursor(server.cursor)
-      setHasMore(server.hasMore)
-      setStats(nextStats)
-      setTotalFiltered(count)
+      const server = await listBooksAsAdmin({ source: 'server' })
+      setBooks(server)
+      setStats(calculateAdminBookStats(server))
     } catch (error) {
       setBooksError(error instanceof Error ? error.message : 'โหลดรายการหนังสือจาก Firestore ไม่สำเร็จ')
     } finally {
       setLoadingBooks(false)
       setRefreshingBooks(false)
     }
-  }, [categoryFilter, page, pageStartCursors, statusFilter])
+  }, [])
 
   useEffect(() => subscribeAdminUser((user, unauthorized) => {
     if (unauthorized) {
@@ -172,16 +153,24 @@ export function AdminPage() {
     if (navigationReleaseTimerRef.current) clearTimeout(navigationReleaseTimerRef.current)
   }, [])
 
-  const visibleBooks = useMemo(
-    () => filterAdminBooks(books, search),
-    [books, search],
+  const matchingBooks = useMemo(
+    () => filterAdminBooks(books, search, categoryFilter, statusFilter),
+    [books, search, categoryFilter, statusFilter],
   )
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / ADMIN_PAGE_SIZE))
+  const pageResult = useMemo(
+    () => paginateAdminBooks(matchingBooks, page),
+    [matchingBooks, page],
+  )
+  const visibleBooks = pageResult.books
+  const totalPages = pageResult.totalPages
+  const hasMore = pageResult.page < totalPages
+
+  useEffect(() => {
+    if (page !== pageResult.page) setPage(pageResult.page)
+  }, [page, pageResult.page])
 
   function resetPagination() {
     setPage(1)
-    setPageStartCursors([null])
-    setPageEndCursor(null)
   }
 
   function selectCategory(categoryCode: string) {
@@ -259,12 +248,7 @@ export function AdminPage() {
   }
 
   function nextPage() {
-    if (!hasMore || !pageEndCursor) return
-    setPageStartCursors((current) => {
-      const next = [...current]
-      next[page] = pageEndCursor
-      return next
-    })
+    if (!hasMore) return
     setPage((current) => current + 1)
   }
 
@@ -375,12 +359,12 @@ export function AdminPage() {
 
         <section className="dashboard-card admin-books-panel" id="books">
           <div className="section-heading">
-            <div><p className="eyebrow">รายการหนังสือ</p><h2>{totalFiltered.toLocaleString('th-TH')} รายการ</h2></div>
+            <div><p className="eyebrow">รายการหนังสือ</p><h2>{matchingBooks.length.toLocaleString('th-TH')} รายการ</h2></div>
             {statusFilter === 'hidden' && <span id="hidden">กำลังแสดงหนังสือที่ซ่อน</span>}
           </div>
 
           <div className="admin-filters">
-            <label className="admin-search"><Search /><input aria-label="ค้นหาหนังสือในหน้านี้" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหาชื่อหรือผู้แต่งในหน้านี้" /></label>
+            <label className="admin-search"><Search /><input aria-label="ค้นหาหนังสือ" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="ค้นหาชื่อหรือผู้แต่ง" /></label>
             <label><span>หมวด</span><select value={categoryFilter} onChange={(event) => selectCategory(event.target.value)}><option value="">ทุกหมวด</option>{stats.byCategory.map(({ categoryCode }) => <option key={categoryCode} value={categoryCode}>{categoryCode}</option>)}</select></label>
             <label><span>สถานะ</span><select value={statusFilter} onChange={(event) => selectStatus(event.target.value as AdminBookStatusFilter)}><option value="all">ทั้งหมด</option><option value="active">เปิดใช้งาน</option><option value="hidden">ซ่อน</option></select></label>
           </div>
@@ -414,7 +398,7 @@ export function AdminPage() {
             </div>
           )}
 
-          {totalFiltered > 0 && (
+          {matchingBooks.length > 0 && (
             <nav className="admin-pagination" aria-label="แบ่งหน้ารายการหนังสือ">
               <button className="button button--secondary button--small" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>ก่อนหน้า</button>
               <span>หน้า {page.toLocaleString('th-TH')} / {totalPages.toLocaleString('th-TH')}</span>
@@ -427,4 +411,3 @@ export function AdminPage() {
     </main>
   )
 }
-

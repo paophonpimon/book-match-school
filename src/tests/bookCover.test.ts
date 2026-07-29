@@ -16,7 +16,6 @@ const book: Book = {
   shelfDescription: 'ชั้นทดสอบ',
   featured: false,
   active: true,
-  displayOrder: 1,
   popularity: 0,
   accent: '#b96b5e',
 }

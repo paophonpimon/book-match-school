@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { filterCatalogToBooksWithCovers, loadCatalog, normalizeBooksApiResponse, splitSemicolonList } from '../services/catalog'
+import {
+  compareCatalogBooks,
+  filterCatalogToBooksWithCovers,
+  loadCatalog,
+  normalizeBooksApiResponse,
+  splitSemicolonList,
+} from '../services/catalog'
 
 const apiPayload = {
   ok: true,
@@ -45,14 +51,30 @@ const apiPayload = {
 describe('Google Sheets catalog', () => {
   beforeEach(() => localStorage.clear())
 
-  it('splits semicolon values, filters inactive books, and sorts displayOrder', () => {
+  it('splits semicolon values, filters inactive books, and ignores retired fields', () => {
     const catalog = normalizeBooksApiResponse(apiPayload)
     expect(catalog.books.map((book) => book.id)).toEqual(['first', 'later'])
     expect(catalog.books[1].tags).toEqual(['ปรัชญา', 'ความรู้'])
     expect(catalog.books[1].moods).toEqual(['อยากได้ความรู้', 'อยากผ่อนคลาย'])
     expect(catalog.books[1].moodTags).toEqual(['learn', 'relax'])
     expect(catalog.books[1].callNumber).toBe('100 ก1')
+    expect(catalog.books[1]).not.toHaveProperty('estimatedReadingMinutes')
+    expect(catalog.books[1]).not.toHaveProperty('displayOrder')
     expect(catalog.categories.map((category) => category.id)).toEqual(['000', '100'])
+  })
+
+  it('orders books by category, locale-aware title, and bookId', () => {
+    const catalog = normalizeBooksApiResponse({
+      ok: true,
+      books: [
+        { id: 'z-1', title: 'ขนมไทย', categoryCode: '100', active: true },
+        { id: 'b-2', title: 'กระต่าย', categoryCode: '100', active: true },
+        { id: 'a-2', title: 'กระต่าย', categoryCode: '100', active: true },
+        { id: 'y-0', title: 'สวัสดี', categoryCode: '000', active: true },
+      ],
+    })
+    expect(catalog.books.map((book) => book.id)).toEqual(['y-0', 'a-2', 'b-2', 'z-1'])
+    expect(compareCatalogBooks(catalog.books[1], catalog.books[2])).toBeLessThan(0)
   })
 
   it('supports arrays and semicolon text in the same parser', () => {

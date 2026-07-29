@@ -25,10 +25,8 @@ export const emptyAdminBook: AdminBookInput = {
   moods: [],
   readingLevel: '',
   recommendedGrades: '',
-  estimatedReadingMinutes: null,
   matchReason: '',
   active: true,
-  displayOrder: 0,
 }
 
 function inputFromBook(book?: AdminBook | null): AdminBookInput {
@@ -230,20 +228,6 @@ export function BookForm({ editingBook, books, onSaved, onCancel }: BookFormProp
             <label>ระดับการอ่าน<input value={book.readingLevel} onChange={(event) => update('readingLevel', event.target.value)} maxLength={80} /></label>
             <label>ชั้นที่แนะนำ<input value={book.recommendedGrades} onChange={(event) => update('recommendedGrades', event.target.value)} maxLength={80} /></label>
           </div>
-          <div className="form-row">
-            <label>เวลาอ่านโดยประมาณ (นาที)<input type="number" min="0" value={book.estimatedReadingMinutes ?? ''} onChange={(event) => update('estimatedReadingMinutes', event.target.value === '' ? null : Number(event.target.value))} /></label>
-            <label>
-              ลำดับการแสดง
-              <input
-                type="number"
-                min="0"
-                value={book.displayOrder}
-                onChange={(event) => update('displayOrder', Number(event.target.value))}
-                aria-describedby="display-order-help"
-              />
-              <small className="admin-field-help" id="display-order-help">ใช้จัดลำดับในรายการ เลขน้อยจะแสดงก่อนเลขมาก เช่น 1 มาก่อน 10</small>
-            </label>
-          </div>
           <fieldset>
             <legend>อารมณ์ที่เหมาะกับหนังสือ <small>เลือก 1–3 ข้อ</small></legend>
             <div className="admin-mood-grid">
@@ -278,4 +262,3 @@ export function BookForm({ editingBook, books, onSaved, onCancel }: BookFormProp
     </section>
   )
 }
-

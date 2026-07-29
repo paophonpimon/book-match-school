@@ -2,10 +2,8 @@ import { demoSettings } from '../data/demoData'
 import type { Book, CatalogPayload, Category, Settings } from '../types'
 import {
   collection,
-  documentId,
   getDocsFromCache,
   getDocsFromServer,
-  orderBy,
   query,
   where,
 } from 'firebase/firestore'
@@ -83,6 +81,14 @@ export function splitSemicolonList(value: unknown) {
     .filter(Boolean)
 }
 
+export function compareCatalogBooks(left: Book, right: Book) {
+  const leftCategory = left.categoryCode || left.categoryId
+  const rightCategory = right.categoryCode || right.categoryId
+  return leftCategory.localeCompare(rightCategory, 'th-TH', { numeric: true })
+    || left.title.localeCompare(right.title, 'th-TH', { numeric: true, sensitivity: 'base' })
+    || left.id.localeCompare(right.id, 'en-US')
+}
+
 function categoryIdFor(categoryCode: string, category: string, index: number) {
   if (categoryCode) return categoryCode
   const fromName = category.toLocaleLowerCase('th-TH').replace(/\s+/g, '-')
@@ -142,19 +148,15 @@ export function normalizeBooksApiResponse(payload: unknown): CatalogPayload {
       moodTags: moods.map((mood) => moodIds[mood] ?? mood).filter(Boolean),
       readingLevel: asText(source.readingLevel),
       recommendedGrades: asText(source.recommendedGrades),
-      estimatedReadingMinutes: source.estimatedReadingMinutes === '' || source.estimatedReadingMinutes == null
-        ? null
-        : asNumber(source.estimatedReadingMinutes, 0),
       matchReason,
       shelfCode: callNumber || categoryCode || 'สอบถามบรรณารักษ์',
       shelfDescription: category ? `หมวด ${category}` : (matchReason || 'สอบถามตำแหน่งหนังสือจากบรรณารักษ์'),
       featured: false,
       active: true,
-      displayOrder: asNumber(source.displayOrder, index + 1),
       popularity: Math.max(0, 100 - index),
       accent: ACCENTS[index % ACCENTS.length],
     }
-  }).sort((a, b) => a.displayOrder - b.displayOrder)
+  }).sort(compareCatalogBooks)
 
   const categoryMap = new Map<string, Category>()
   books.forEach((book) => {
@@ -188,8 +190,6 @@ function firestoreCatalogQuery() {
   return query(
     collection(db, 'books'),
     where('active', '==', true),
-    orderBy('displayOrder', 'asc'),
-    orderBy(documentId(), 'asc'),
   )
 }
 
@@ -286,4 +286,3 @@ export async function loadCatalog(options: LoadCatalogOptions = {}): Promise<Cat
     }
   }
 }
-
