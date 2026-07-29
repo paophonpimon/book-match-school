@@ -1,0 +1,1168 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'paopornpimon@gmail.com';
+    }
+
+    function hasVerifiedEmail() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+
+    function currentTermId() {
+      return get(/databases/$(database)/documents/settings/currentTerm).data.termId;
+    }
+
+    function activeMember(uid) {
+      let profilePath = /databases/$(database)/documents/profiles/$(uid);
+      let studentId = get(profilePath).data.studentId;
+      let membershipPath = /databases/$(database)/documents/studentMemberships/$(studentId);
+      return owns(uid)
+        && exists(profilePath)
+        && exists(membershipPath)
+        && get(membershipPath).data.uid == uid
+        && get(membershipPath).data.status == 'active';
+    }
+
+    function activeMemberAfter(uid) {
+      let profilePath = /databases/$(database)/documents/profiles/$(uid);
+      let studentId = getAfter(profilePath).data.studentId;
+      let membershipPath = /databases/$(database)/documents/studentMemberships/$(studentId);
+      return owns(uid)
+        && existsAfter(profilePath)
+        && existsAfter(membershipPath)
+        && getAfter(membershipPath).data.uid == uid
+        && getAfter(membershipPath).data.status == 'active';
+    }
+
+    function shortText(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    function optionalTimestamp(value) {
+      return value == null || value is timestamp;
+    }
+
+    function validExtendedProfile() {
+      let fields = ['studentId', 'firstName', 'lastName', 'gradeLevel'];
+      return request.resource.data.keys().hasAll(fields)
+          && shortText(request.resource.data.studentId, 3, 20)
+          && request.resource.data.studentId.matches('^[0-9]{3,20}$')
+          && shortText(request.resource.data.firstName, 1, 60)
+          && shortText(request.resource.data.lastName, 1, 60)
+          && request.resource.data.gradeLevel.matches('^[1-6](/[1-9][0-9]?)?$')
+          && request.resource.data.studentNumber.matches('^[1-9][0-9]{0,2}$')
+          && request.resource.data.className == 'ม.' + request.resource.data.gradeLevel;
+    }
+
+    function validProfile(uid) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'className', 'studentNumber', 'studentId', 'firstName',
+          'lastName', 'gradeLevel', 'interests', 'createdAt', 'lastActiveAt'
+        ])
+        && request.resource.data.uid == uid
+        && shortText(request.resource.data.displayName, 2, 40)
+        && shortText(request.resource.data.className, 1, 20)
+        && shortText(request.resource.data.studentNumber, 1, 20)
+        && validExtendedProfile()
+        && request.resource.data.interests is list
+        && request.resource.data.interests.size() <= 20
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.lastActiveAt is timestamp;
+    }
+
+    function profileMembershipMatches(uid) {
+      let membershipPath = /databases/$(database)/documents/studentMemberships/$(request.resource.data.studentId);
+      let uidLockPath = /databases/$(database)/documents/studentMembershipUids/$(uid);
+      return existsAfter(membershipPath)
+        && getAfter(membershipPath).data.uid == uid
+        && existsAfter(uidLockPath)
+        && getAfter(uidLockPath).data.studentId == request.resource.data.studentId;
+    }
+
+    match /profiles/{uid} {
+      allow get: if owns(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if owns(uid)
+        && validProfile(uid)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.lastActiveAt == request.time
+        && profileMembershipMatches(uid);
+      allow update: if owns(uid)
+        && validProfile(uid)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.lastActiveAt == request.time
+        && profileMembershipMatches(uid);
+      allow delete: if false;
+    }
+
+    function validMembership(studentId) {
+      return request.resource.data.keys().hasOnly([
+          'studentId', 'uid', 'email', 'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.studentId == studentId
+        && shortText(studentId, 3, 20)
+        && studentId.matches('^[0-9]{3,20}$')
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function membershipUidLockMatches(studentId) {
+      let uidLockPath = /databases/$(database)/documents/studentMembershipUids/$(request.auth.uid);
+      return existsAfter(uidLockPath)
+        && getAfter(uidLockPath).data.studentId == studentId
+        && getAfter(uidLockPath).data.email == request.auth.token.email;
+    }
+
+    match /studentMemberships/{studentId} {
+      allow get: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow list: if isAdmin();
+      allow create: if hasVerifiedEmail()
+        && validMembership(studentId)
+        && membershipUidLockMatches(studentId);
+      allow update: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'studentId', 'uid', 'email', 'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.status in ['active', 'suspended', 'graduated', 'transferred']
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /studentMembershipUids/{uid} {
+      allow get: if owns(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if hasVerifiedEmail()
+        && owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'uid', 'studentId', 'email', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.studentId.matches('^[0-9]{3,20}$')
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update, delete: if false;
+    }
+
+    function validUserBook(recordId) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'termId', 'bookId', 'status', 'rating', 'review', 'moodAfterReading',
+          'favoriteAspect', 'likedAt', 'startedAt', 'readAt', 'updatedAt',
+          'lifetimeReadCredited', 'lifetimeCreditedAt'
+        ])
+        && activeMember(request.resource.data.uid)
+        && recordId == request.resource.data.termId + '_' + request.resource.data.uid + '_' + request.resource.data.bookId
+        && request.resource.data.termId == currentTermId()
+        && shortText(request.resource.data.termId, 1, 40)
+        && shortText(request.resource.data.bookId, 1, 120)
+        && request.resource.data.status in ['liked', 'saved', 'reading', 'read']
+        && (request.resource.data.rating == null
+          || (request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5))
+        && (request.resource.data.review == null || shortText(request.resource.data.review, 0, 300))
+        && (request.resource.data.moodAfterReading == null || shortText(request.resource.data.moodAfterReading, 1, 40))
+        && (request.resource.data.favoriteAspect == null || shortText(request.resource.data.favoriteAspect, 1, 60))
+        && optionalTimestamp(request.resource.data.likedAt)
+        && optionalTimestamp(request.resource.data.startedAt)
+        && optionalTimestamp(request.resource.data.readAt)
+        && request.resource.data.lifetimeReadCredited is bool
+        && optionalTimestamp(request.resource.data.lifetimeCreditedAt)
+        && request.resource.data.updatedAt is timestamp
+        && (request.resource.data.status != 'read'
+          ? request.resource.data.lifetimeReadCredited == false
+            && request.resource.data.lifetimeCreditedAt == null
+          : (request.resource.data.rating is int
+            && shortText(request.resource.data.review, 20, 300)
+            && shortText(request.resource.data.moodAfterReading, 1, 40)
+            && shortText(request.resource.data.favoriteAspect, 1, 60)
+            && request.resource.data.readAt is timestamp
+            && request.resource.data.lifetimeReadCredited == true
+            && request.resource.data.lifetimeCreditedAt is timestamp));
+    }
+
+    function validUserBookStatusTransition() {
+      return (resource.data.status == 'read' && request.resource.data.status == 'read')
+        || (resource.data.status == 'reading' && request.resource.data.status in ['reading', 'read'])
+        || (resource.data.status in ['liked', 'saved']
+          && request.resource.data.status in ['liked', 'saved', 'reading', 'read'])
+        || (!(resource.data.status in ['liked', 'saved', 'reading', 'read'])
+          && request.resource.data.status in ['liked', 'saved', 'reading']);
+    }
+
+    function userBookIdBelongsToSignedInUser(recordId) {
+      return signedIn()
+        && recordId.matches('^.{1,40}_' + request.auth.uid + '_.{1,120}$');
+    }
+
+    match /userBooks/{recordId} {
+      // A transaction must be allowed to read its own not-yet-existing document.
+      // The exact UID is embedded between termId and bookId in the canonical ID.
+      allow get: if userBookIdBelongsToSignedInUser(recordId);
+      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if validUserBook(recordId);
+      allow update: if validUserBook(recordId)
+        && validUserBookStatusTransition()
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.termId == resource.data.termId
+        && request.resource.data.bookId == resource.data.bookId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'rating', 'review', 'moodAfterReading', 'favoriteAspect',
+          'likedAt', 'startedAt', 'readAt', 'updatedAt',
+          'lifetimeReadCredited', 'lifetimeCreditedAt'
+        ]);
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && resource.data.status != 'read'
+        && activeMember(request.auth.uid);
+    }
+
+    function validProgress(recordId) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'termId', 'displayName', 'className', 'readCount', 'likedCount',
+          'eligible', 'lastReadAt', 'updatedAt'
+        ])
+        && activeMemberAfter(request.resource.data.uid)
+        && recordId == request.resource.data.termId + '_' + request.resource.data.uid
+        && request.resource.data.termId == currentTermId()
+        && shortText(request.resource.data.termId, 1, 40)
+        && shortText(request.resource.data.displayName, 2, 40)
+        && shortText(request.resource.data.className, 1, 20)
+        && request.resource.data.readCount is int
+        && request.resource.data.readCount >= 0
+        && request.resource.data.likedCount is int
+        && request.resource.data.likedCount >= 0
+        && request.resource.data.eligible is bool
+        && optionalTimestamp(request.resource.data.lastReadAt)
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    match /progress/{recordId} {
+      allow read: if signedIn();
+      allow create: if validProgress(recordId)
+        && request.resource.data.readCount <= 1
+        && request.resource.data.likedCount <= 1
+        && request.resource.data.eligible == true;
+      allow update: if validProgress(recordId)
+        && request.resource.data.eligible == resource.data.eligible
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'className', 'readCount', 'likedCount', 'lastReadAt', 'updatedAt'
+        ])
+        && request.resource.data.readCount >= resource.data.readCount
+        && request.resource.data.readCount <= resource.data.readCount + 1
+        && request.resource.data.likedCount >= resource.data.likedCount - 1
+        && request.resource.data.likedCount <= resource.data.likedCount + 1;
+      allow delete: if false;
+    }
+
+    function validBookStats(recordId) {
+      return request.resource.data.keys().hasOnly([
+          'termId', 'bookId', 'likeCount', 'saveCount', 'readingCount', 'readCount',
+          'ratingTotal', 'ratingCount', 'lastUpdatedBy', 'updatedAt'
+        ])
+        && activeMember(request.auth.uid)
+        && request.resource.data.lastUpdatedBy == request.auth.uid
+        && recordId == request.resource.data.termId + '_' + request.resource.data.bookId
+        && request.resource.data.likeCount is int && request.resource.data.likeCount >= 0
+        && request.resource.data.saveCount is int && request.resource.data.saveCount >= 0
+        && request.resource.data.readingCount is int && request.resource.data.readingCount >= 0
+        && request.resource.data.readCount is int && request.resource.data.readCount >= 0
+        && request.resource.data.ratingTotal is int && request.resource.data.ratingTotal >= 0
+        && request.resource.data.ratingCount is int && request.resource.data.ratingCount >= 0
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function changesByAtMostOne(next, previous) {
+      return next >= previous - 1 && next <= previous + 1;
+    }
+
+    function validStatsCreateTransition() {
+      let userBookPath = /databases/$(database)/documents/userBooks/$(request.resource.data.termId + '_' + request.auth.uid + '_' + request.resource.data.bookId);
+      let afterBook = getAfter(userBookPath).data;
+      let afterStatus = afterBook.status;
+      return existsAfter(userBookPath)
+        && afterBook.uid == request.auth.uid
+        && afterBook.termId == request.resource.data.termId
+        && afterBook.bookId == request.resource.data.bookId
+        && request.resource.data.likeCount == (afterBook.likedAt is timestamp ? 1 : 0)
+        && request.resource.data.saveCount == (afterStatus == 'saved' ? 1 : 0)
+        && request.resource.data.readingCount == (afterStatus == 'reading' ? 1 : 0)
+        && request.resource.data.readCount == (afterStatus == 'read' ? 1 : 0)
+        && request.resource.data.ratingCount == (afterStatus == 'read' ? 1 : 0)
+        && request.resource.data.ratingTotal == (afterStatus == 'read' ? afterBook.rating : 0);
+    }
+
+    function validStatsUpdateTransition() {
+      let userBookPath = /databases/$(database)/documents/userBooks/$(request.resource.data.termId + '_' + request.auth.uid + '_' + request.resource.data.bookId);
+      let beforeStatus = exists(userBookPath) ? get(userBookPath).data.status : 'none';
+      let afterStatus = existsAfter(userBookPath) ? getAfter(userBookPath).data.status : 'none';
+      let afterRating = existsAfter(userBookPath) && afterStatus == 'read' ? getAfter(userBookPath).data.rating : 0;
+      let ownsTransition = (existsAfter(userBookPath) && getAfter(userBookPath).data.uid == request.auth.uid)
+        || (!existsAfter(userBookPath) && exists(userBookPath) && get(userBookPath).data.uid == request.auth.uid);
+      let firstLike = beforeStatus != 'liked' && beforeStatus != 'saved' && beforeStatus != 'reading' && beforeStatus != 'read' && afterStatus == 'liked';
+      let undoFirstLike = beforeStatus == 'liked' && afterStatus == 'none';
+      let completedNow = beforeStatus != 'read' && afterStatus == 'read';
+      return ownsTransition
+        && request.resource.data.likeCount == resource.data.likeCount + (firstLike ? 1 : 0) - (undoFirstLike ? 1 : 0)
+        && request.resource.data.saveCount == resource.data.saveCount + (afterStatus == 'saved' ? 1 : 0) - (beforeStatus == 'saved' ? 1 : 0)
+        && request.resource.data.readingCount == resource.data.readingCount + (afterStatus == 'reading' ? 1 : 0) - (beforeStatus == 'reading' ? 1 : 0)
+        && request.resource.data.readCount == resource.data.readCount + (completedNow ? 1 : 0)
+        && request.resource.data.ratingCount == resource.data.ratingCount + (completedNow ? 1 : 0)
+        && request.resource.data.ratingTotal == resource.data.ratingTotal + (completedNow ? afterRating : 0);
+    }
+
+    match /bookStats/{recordId} {
+      allow read: if signedIn();
+      allow create: if validBookStats(recordId)
+        && request.resource.data.likeCount <= 1
+        && request.resource.data.saveCount <= 1
+        && request.resource.data.readingCount <= 1
+        && request.resource.data.readCount <= 1
+        && request.resource.data.ratingCount <= 1
+        && request.resource.data.ratingTotal <= 5
+        && validStatsCreateTransition();
+      allow update: if validBookStats(recordId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'likeCount', 'saveCount', 'readingCount', 'readCount', 'ratingTotal',
+          'ratingCount', 'lastUpdatedBy', 'updatedAt'
+        ])
+        && changesByAtMostOne(request.resource.data.likeCount, resource.data.likeCount)
+        && changesByAtMostOne(request.resource.data.saveCount, resource.data.saveCount)
+        && changesByAtMostOne(request.resource.data.readingCount, resource.data.readingCount)
+        && request.resource.data.readCount >= resource.data.readCount
+        && request.resource.data.readCount <= resource.data.readCount + 1
+        && request.resource.data.ratingCount >= resource.data.ratingCount
+        && request.resource.data.ratingCount <= resource.data.ratingCount + 1
+        && request.resource.data.ratingTotal >= resource.data.ratingTotal
+        && request.resource.data.ratingTotal <= resource.data.ratingTotal + 5
+        && validStatsUpdateTransition();
+      allow delete: if false;
+    }
+
+    function readerLevelFor(count) {
+      return count >= 20 ? 6
+        : count >= 14 ? 5
+        : count >= 9 ? 4
+        : count >= 5 ? 3
+        : count >= 2 ? 2
+        : 1;
+    }
+
+    function validReaderStats(uid) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'lifetimeReadCount', 'currentLevel', 'updatedAt',
+          'lastCreditedUserBookId'
+        ])
+        && owns(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.lifetimeReadCount is int
+        && request.resource.data.lifetimeReadCount >= 1
+        && request.resource.data.currentLevel
+          == readerLevelFor(request.resource.data.lifetimeReadCount)
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.lastCreditedUserBookId, 1, 300);
+    }
+
+    function readerCreditMatchesUserBook(uid) {
+      let recordId = request.resource.data.lastCreditedUserBookId;
+      let bookPath = /databases/$(database)/documents/userBooks/$(recordId);
+      return recordId.matches('^.{1,40}_' + uid + '_.{1,120}$')
+        && existsAfter(bookPath)
+        && getAfter(bookPath).data.uid == uid
+        && getAfter(bookPath).data.status == 'read'
+        && getAfter(bookPath).data.lifetimeReadCredited == true
+        && getAfter(bookPath).data.lifetimeCreditedAt == request.time
+        && (!exists(bookPath)
+          || !(get(bookPath).data.lifetimeReadCredited == true));
+    }
+
+    match /readerStats/{uid} {
+      allow get: if owns(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if activeMember(uid)
+        && validReaderStats(uid)
+        && request.resource.data.lifetimeReadCount == 1
+        && readerCreditMatchesUserBook(uid);
+      allow update: if activeMember(uid)
+        && validReaderStats(uid)
+        && request.resource.data.lifetimeReadCount
+          == resource.data.lifetimeReadCount + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'lifetimeReadCount', 'currentLevel', 'updatedAt',
+          'lastCreditedUserBookId'
+        ])
+        && readerCreditMatchesUserBook(uid);
+      allow delete: if false;
+    }
+
+    function validTerm(termId) {
+      return termId.matches('^[0-9]{4}-(1|2)$')
+        && request.resource.data.keys().hasOnly([
+          'name', 'academicYear', 'semester', 'startDate', 'endDate', 'status',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'
+        ])
+        && shortText(request.resource.data.name, 1, 120)
+        && request.resource.data.academicYear is int
+        && request.resource.data.academicYear >= 2500
+        && request.resource.data.academicYear <= 9999
+        && request.resource.data.semester in [1, 2]
+        && request.resource.data.startDate is timestamp
+        && request.resource.data.endDate is timestamp
+        && request.resource.data.endDate >= request.resource.data.startDate
+        && request.resource.data.status in ['draft', 'active', 'closed']
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.createdBy, 1, 128)
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    match /terms/{termId} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        && validTerm(termId)
+        && request.resource.data.status == 'draft'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAdmin()
+        && validTerm(termId)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'updatedAt', 'updatedBy'
+        ])
+        && ((resource.data.status == 'draft'
+            && request.resource.data.status in ['draft', 'active'])
+          || (resource.data.status == 'active'
+            && request.resource.data.status in ['active', 'closed'])
+          || (resource.data.status == 'closed'
+            && request.resource.data.status == 'closed'));
+      allow delete: if false;
+    }
+
+    function validCurrentTermSetting() {
+      let termId = request.resource.data.termId;
+      let termPath = /databases/$(database)/documents/terms/$(termId);
+      return request.resource.data.keys().hasOnly([
+          'termId', 'updatedAt', 'updatedBy'
+        ])
+        && termId.matches('^[0-9]{4}-(1|2)$')
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid
+        && existsAfter(termPath)
+        && getAfter(termPath).data.status == 'active';
+    }
+
+    match /settings/currentTerm {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        && validCurrentTermSetting();
+      allow delete: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read, write: if false;
+    }
+
+    function validLoanSchema(loanId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'uid', 'termId', 'bookId', 'status', 'requestedAt', 'approvedAt',
+          'borrowedAt', 'dueAt', 'returnedAt', 'rejectedAt', 'cancelledAt',
+          'approvedBy', 'returnedBy', 'renewCount', 'loanDays', 'adminNote',
+          'studentDisplayName', 'studentFirstName', 'studentLastName',
+          'studentClassroom', 'studentNumber', 'studentId', 'bookTitle',
+          'bookAuthor', 'bookCoverUrl', 'createdAt', 'updatedAt', 'lastAuditId'
+        ])
+        && request.resource.data.id == loanId
+        && shortText(request.resource.data.uid, 1, 128)
+        && shortText(request.resource.data.termId, 1, 40)
+        && shortText(request.resource.data.bookId, 1, 128)
+        && request.resource.data.status in [
+          'pending', 'approved', 'borrowed', 'returned', 'rejected', 'cancelled'
+        ]
+        && request.resource.data.requestedAt is timestamp
+        && optionalTimestamp(request.resource.data.approvedAt)
+        && optionalTimestamp(request.resource.data.borrowedAt)
+        && optionalTimestamp(request.resource.data.dueAt)
+        && optionalTimestamp(request.resource.data.returnedAt)
+        && optionalTimestamp(request.resource.data.rejectedAt)
+        && optionalTimestamp(request.resource.data.cancelledAt)
+        && (request.resource.data.approvedBy == null
+          || shortText(request.resource.data.approvedBy, 1, 128))
+        && (request.resource.data.returnedBy == null
+          || shortText(request.resource.data.returnedBy, 1, 128))
+        && request.resource.data.renewCount is int
+        && request.resource.data.renewCount >= 0
+        && request.resource.data.renewCount <= 1
+        && request.resource.data.loanDays is int
+        && request.resource.data.loanDays >= 1
+        && request.resource.data.loanDays <= 30
+        && request.resource.data.adminNote is string
+        && request.resource.data.adminNote.size() <= 500
+        && shortText(request.resource.data.studentDisplayName, 2, 40)
+        && shortText(request.resource.data.studentFirstName, 1, 60)
+        && shortText(request.resource.data.studentLastName, 1, 60)
+        && shortText(request.resource.data.studentClassroom, 1, 20)
+        && shortText(request.resource.data.studentNumber, 1, 20)
+        && shortText(request.resource.data.studentId, 3, 20)
+        && shortText(request.resource.data.bookTitle, 1, 300)
+        && request.resource.data.bookAuthor is string
+        && request.resource.data.bookAuthor.size() <= 300
+        && request.resource.data.bookCoverUrl is string
+        && request.resource.data.bookCoverUrl.size() <= 2000
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.lastAuditId, 1, 128);
+    }
+
+    function validLoanStatusShape() {
+      let status = request.resource.data.status;
+      return (status == 'pending'
+          && request.resource.data.approvedAt == null
+          && request.resource.data.borrowedAt == null
+          && request.resource.data.dueAt == null
+          && request.resource.data.returnedAt == null
+          && request.resource.data.rejectedAt == null
+          && request.resource.data.cancelledAt == null
+          && request.resource.data.approvedBy == null
+          && request.resource.data.returnedBy == null
+          && request.resource.data.renewCount == 0)
+        || (status == 'approved'
+          && request.resource.data.approvedAt is timestamp
+          && request.resource.data.approvedBy is string
+          && request.resource.data.borrowedAt == null
+          && request.resource.data.dueAt == null
+          && request.resource.data.returnedAt == null
+          && request.resource.data.rejectedAt == null
+          && request.resource.data.cancelledAt == null
+          && request.resource.data.returnedBy == null
+          && request.resource.data.renewCount == 0)
+        || (status == 'borrowed'
+          && request.resource.data.approvedAt is timestamp
+          && request.resource.data.approvedBy is string
+          && request.resource.data.borrowedAt is timestamp
+          && request.resource.data.dueAt is timestamp
+          && request.resource.data.returnedAt == null
+          && request.resource.data.rejectedAt == null
+          && request.resource.data.cancelledAt == null
+          && request.resource.data.returnedBy == null)
+        || (status == 'returned'
+          && request.resource.data.approvedAt is timestamp
+          && request.resource.data.borrowedAt is timestamp
+          && request.resource.data.dueAt is timestamp
+          && request.resource.data.returnedAt is timestamp
+          && request.resource.data.returnedBy is string
+          && request.resource.data.rejectedAt == null
+          && request.resource.data.cancelledAt == null)
+        || (status == 'rejected'
+          && request.resource.data.borrowedAt == null
+          && request.resource.data.dueAt == null
+          && request.resource.data.returnedAt == null
+          && request.resource.data.rejectedAt is timestamp
+          && request.resource.data.cancelledAt == null
+          && request.resource.data.returnedBy == null
+          && request.resource.data.renewCount == 0)
+        || (status == 'cancelled'
+          && request.resource.data.approvedAt == null
+          && request.resource.data.borrowedAt == null
+          && request.resource.data.dueAt == null
+          && request.resource.data.returnedAt == null
+          && request.resource.data.rejectedAt == null
+          && request.resource.data.cancelledAt is timestamp
+          && request.resource.data.approvedBy == null
+          && request.resource.data.returnedBy == null
+          && request.resource.data.renewCount == 0);
+    }
+
+    function loanImmutableFieldsValid() {
+      return request.resource.data.id == resource.data.id
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.termId == resource.data.termId
+        && request.resource.data.bookId == resource.data.bookId
+        && request.resource.data.requestedAt == resource.data.requestedAt
+        && request.resource.data.studentDisplayName == resource.data.studentDisplayName
+        && request.resource.data.studentFirstName == resource.data.studentFirstName
+        && request.resource.data.studentLastName == resource.data.studentLastName
+        && request.resource.data.studentClassroom == resource.data.studentClassroom
+        && request.resource.data.studentNumber == resource.data.studentNumber
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.bookTitle == resource.data.bookTitle
+        && request.resource.data.bookAuthor == resource.data.bookAuthor
+        && request.resource.data.bookCoverUrl == resource.data.bookCoverUrl
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function validStudentLoanCreate(loanId) {
+      let profilePath = /databases/$(database)/documents/profiles/$(request.auth.uid);
+      let profile = get(profilePath).data;
+      let bookPath = /databases/$(database)/documents/books/$(request.resource.data.bookId);
+      let book = get(bookPath).data;
+      let keyPath = /databases/$(database)/documents/studentLoanActiveKeys/$(request.auth.uid + '_' + request.resource.data.bookId);
+      let key = getAfter(keyPath).data;
+      let lockPath = /databases/$(database)/documents/bookLoanLocks/$(request.resource.data.bookId);
+      return owns(request.resource.data.uid)
+        && activeMember(request.resource.data.uid)
+        && request.resource.data.termId == currentTermId()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.adminNote == ''
+        && request.resource.data.loanDays == 7
+        && exists(profilePath)
+        && request.resource.data.studentDisplayName == profile.displayName
+        && request.resource.data.studentFirstName == profile.firstName
+        && request.resource.data.studentLastName == profile.lastName
+        && request.resource.data.studentClassroom == profile.className
+        && request.resource.data.studentNumber == profile.studentNumber
+        && request.resource.data.studentId == profile.studentId
+        && exists(bookPath)
+        && book.active == true
+        && request.resource.data.bookTitle == book.title
+        && request.resource.data.bookAuthor == book.author
+        && request.resource.data.bookCoverUrl == book.coverUrl
+        && !exists(lockPath)
+        && existsAfter(keyPath)
+        && key.loanId == loanId
+        && key.uid == request.auth.uid
+        && key.bookId == request.resource.data.bookId
+        && key.status == 'pending'
+        && key.lastAuditId == request.resource.data.lastAuditId;
+    }
+
+    function validStudentLoanCancel() {
+      let keyPath = /databases/$(database)/documents/studentLoanActiveKeys/$(request.auth.uid + '_' + resource.data.bookId);
+      return owns(resource.data.uid)
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.cancelledAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'cancelledAt', 'updatedAt', 'lastAuditId'
+        ])
+        && !existsAfter(keyPath);
+    }
+
+    function validLoanAuditLink(loanId) {
+      let auditPath = /databases/$(database)/documents/loanAuditLogs/$(request.resource.data.lastAuditId);
+      let audit = getAfter(auditPath).data;
+      return existsAfter(auditPath)
+        && audit.loanId == loanId
+        && audit.bookId == request.resource.data.bookId
+        && audit.studentUid == request.resource.data.uid
+        && audit.nextStatus == request.resource.data.status
+        && audit.createdAt == request.time;
+    }
+
+    function validAdminLoanUpdate() {
+      let approve = resource.data.status == 'pending'
+        && request.resource.data.status == 'approved'
+        && request.resource.data.approvedAt == request.time
+        && request.resource.data.approvedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'approvedAt', 'approvedBy', 'loanDays', 'adminNote',
+          'updatedAt', 'lastAuditId'
+        ]);
+      let reject = resource.data.status in ['pending', 'approved']
+        && request.resource.data.status == 'rejected'
+        && request.resource.data.rejectedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'rejectedAt', 'adminNote', 'updatedAt', 'lastAuditId'
+        ]);
+      let pickup = resource.data.status == 'approved'
+        && request.resource.data.status == 'borrowed'
+        && request.resource.data.borrowedAt == request.time
+        && request.resource.data.dueAt
+          > request.time + duration.value(request.resource.data.loanDays, 'd') - duration.value(5, 'm')
+        && request.resource.data.dueAt
+          < request.time + duration.value(request.resource.data.loanDays, 'd') + duration.value(5, 'm')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'borrowedAt', 'dueAt', 'loanDays', 'updatedAt', 'lastAuditId'
+        ]);
+      let renew = resource.data.status == 'borrowed'
+        && request.resource.data.status == 'borrowed'
+        && resource.data.renewCount < 1
+        && request.resource.data.renewCount == resource.data.renewCount + 1
+        && request.resource.data.dueAt
+          == resource.data.dueAt + duration.value(resource.data.loanDays, 'd')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'dueAt', 'renewCount', 'updatedAt', 'lastAuditId'
+        ]);
+      let returned = resource.data.status == 'borrowed'
+        && request.resource.data.status == 'returned'
+        && request.resource.data.returnedAt == request.time
+        && request.resource.data.returnedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'returnedAt', 'returnedBy', 'updatedAt', 'lastAuditId'
+        ]);
+      return isAdmin()
+        && (approve || reject || pickup || renew || returned);
+    }
+
+    match /loans/{loanId} {
+      allow get: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow list: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if validLoanSchema(loanId)
+        && validLoanStatusShape()
+        && validStudentLoanCreate(loanId)
+        && validLoanAuditLink(loanId);
+      // Admin writes are validated in one direction: active key/lock/audit -> loan
+      // through each companion document's own rule. Avoid a circular loan -> audit
+      // getAfter() check here, which causes valid atomic approval commits to be denied.
+      allow update: if (isAdmin()
+          && validLoanSchema(loanId)
+          && validLoanStatusShape()
+          && loanImmutableFieldsValid()
+          && validAdminLoanUpdate())
+        || (validLoanSchema(loanId)
+          && validLoanStatusShape()
+          && loanImmutableFieldsValid()
+          && validLoanAuditLink(loanId)
+          && validStudentLoanCancel());
+      allow delete: if false;
+    }
+
+    function validActiveKey(keyId) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'bookId', 'loanId', 'status', 'updatedAt', 'lastAuditId'
+        ])
+        && keyId == request.resource.data.uid + '_' + request.resource.data.bookId
+        && shortText(request.resource.data.uid, 1, 128)
+        && shortText(request.resource.data.bookId, 1, 128)
+        && shortText(request.resource.data.loanId, 1, 128)
+        && request.resource.data.status in ['pending', 'approved', 'borrowed']
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.lastAuditId, 1, 128);
+    }
+
+    function activeKeyMatchesLoan() {
+      let loanPath = /databases/$(database)/documents/loans/$(request.resource.data.loanId);
+      let loan = getAfter(loanPath).data;
+      return existsAfter(loanPath)
+        && loan.uid == request.resource.data.uid
+        && loan.bookId == request.resource.data.bookId
+        && loan.status == request.resource.data.status
+        && loan.lastAuditId == request.resource.data.lastAuditId;
+    }
+
+    function validActiveKeyDelete() {
+      let loanPath = /databases/$(database)/documents/loans/$(resource.data.loanId);
+      let loan = getAfter(loanPath).data;
+      return existsAfter(loanPath)
+        && loan.uid == resource.data.uid
+        && loan.bookId == resource.data.bookId
+        && loan.status in ['cancelled', 'rejected', 'returned']
+        && (isAdmin() || (owns(resource.data.uid) && loan.status == 'cancelled'));
+    }
+
+    match /studentLoanActiveKeys/{keyId} {
+      allow get: if isAdmin() || (signedIn() && keyId.matches('^' + request.auth.uid + '_.+$'));
+      allow list: if false;
+      allow create: if owns(request.resource.data.uid)
+        && validActiveKey(keyId)
+        && request.resource.data.status == 'pending'
+        && activeKeyMatchesLoan();
+      allow update: if isAdmin()
+        && validActiveKey(keyId)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.bookId == resource.data.bookId
+        && request.resource.data.loanId == resource.data.loanId
+        && ((resource.data.status == 'pending' && request.resource.data.status == 'approved')
+          || (resource.data.status == 'approved' && request.resource.data.status == 'borrowed'))
+        && activeKeyMatchesLoan();
+      allow delete: if validActiveKeyDelete();
+    }
+
+    function validBookLoanLock(bookId) {
+      return request.resource.data.keys().hasOnly([
+          'bookId', 'loanId', 'status', 'updatedAt', 'lastAuditId'
+        ])
+        && request.resource.data.bookId == bookId
+        && shortText(request.resource.data.loanId, 1, 128)
+        && request.resource.data.status in ['approved', 'borrowed']
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.lastAuditId, 1, 128);
+    }
+
+    function bookLoanLockMatchesLoan(bookId) {
+      let loanPath = /databases/$(database)/documents/loans/$(request.resource.data.loanId);
+      let loan = getAfter(loanPath).data;
+      return existsAfter(loanPath)
+        && loan.bookId == bookId
+        && loan.status == request.resource.data.status
+        && loan.lastAuditId == request.resource.data.lastAuditId;
+    }
+
+    function validBookLoanLockDelete(bookId) {
+      let loanPath = /databases/$(database)/documents/loans/$(resource.data.loanId);
+      let loan = getAfter(loanPath).data;
+      return isAdmin()
+        && existsAfter(loanPath)
+        && loan.bookId == bookId
+        && loan.status in ['rejected', 'returned']
+        && loan.lastAuditId is string;
+    }
+
+    match /bookLoanLocks/{bookId} {
+      // Locks contain no student UID or profile fields, so one collection read can
+      // show availability without leaking borrower identity or causing N+1 reads.
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        && validBookLoanLock(bookId)
+        && request.resource.data.status == 'approved'
+        && bookLoanLockMatchesLoan(bookId);
+      allow update: if isAdmin()
+        && validBookLoanLock(bookId)
+        && request.resource.data.loanId == resource.data.loanId
+        && ((resource.data.status == 'approved' && request.resource.data.status == 'borrowed')
+          || (resource.data.status == 'borrowed' && request.resource.data.status == 'borrowed'))
+        && bookLoanLockMatchesLoan(bookId);
+      allow delete: if validBookLoanLockDelete(bookId);
+    }
+
+    function validLoanAuditCreate(auditId) {
+      let loanPath = /databases/$(database)/documents/loans/$(request.resource.data.loanId);
+      let loan = getAfter(loanPath).data;
+      let studentAction = request.resource.data.action in ['request', 'cancel']
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.actorEmail == null
+        && request.resource.data.studentUid == request.auth.uid;
+      let adminAction = request.resource.data.action in [
+          'approve', 'reject', 'pickup', 'renew', 'return'
+        ]
+        && isAdmin()
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.actorEmail == 'paopornpimon@gmail.com';
+      let actionTransition = (request.resource.data.action == 'request'
+          && request.resource.data.previousStatus == null
+          && request.resource.data.nextStatus == 'pending')
+        || (request.resource.data.action == 'cancel'
+          && request.resource.data.previousStatus == 'pending'
+          && request.resource.data.nextStatus == 'cancelled')
+        || (request.resource.data.action == 'approve'
+          && request.resource.data.previousStatus == 'pending'
+          && request.resource.data.nextStatus == 'approved')
+        || (request.resource.data.action == 'reject'
+          && request.resource.data.previousStatus in ['pending', 'approved']
+          && request.resource.data.nextStatus == 'rejected')
+        || (request.resource.data.action == 'pickup'
+          && request.resource.data.previousStatus == 'approved'
+          && request.resource.data.nextStatus == 'borrowed')
+        || (request.resource.data.action == 'renew'
+          && request.resource.data.previousStatus == 'borrowed'
+          && request.resource.data.nextStatus == 'borrowed')
+        || (request.resource.data.action == 'return'
+          && request.resource.data.previousStatus == 'borrowed'
+          && request.resource.data.nextStatus == 'returned');
+      return request.resource.data.keys().hasOnly([
+          'action', 'loanId', 'bookId', 'studentUid', 'previousStatus',
+          'nextStatus', 'actorUid', 'actorEmail', 'note', 'createdAt'
+        ])
+        && request.resource.data.action in [
+          'request', 'cancel', 'approve', 'reject', 'pickup', 'renew', 'return'
+        ]
+        && shortText(request.resource.data.loanId, 1, 128)
+        && shortText(request.resource.data.bookId, 1, 128)
+        && shortText(request.resource.data.studentUid, 1, 128)
+        && request.resource.data.nextStatus in [
+          'pending', 'approved', 'borrowed', 'returned', 'rejected', 'cancelled'
+        ]
+        && (request.resource.data.previousStatus == null
+          || request.resource.data.previousStatus in [
+            'pending', 'approved', 'borrowed', 'returned', 'rejected', 'cancelled'
+          ])
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 500
+        && request.resource.data.createdAt == request.time
+        && existsAfter(loanPath)
+        && loan.lastAuditId == auditId
+        && loan.bookId == request.resource.data.bookId
+        && loan.uid == request.resource.data.studentUid
+        && loan.status == request.resource.data.nextStatus
+        && actionTransition
+        && (studentAction || adminAction);
+    }
+
+    match /loanAuditLogs/{auditId} {
+      allow read: if isAdmin();
+      allow create: if signedIn() && validLoanAuditCreate(auditId);
+      allow update, delete: if false;
+    }
+
+    function validBookCore(bookId) {
+      return request.resource.data.keys().hasAll([
+          'id', 'title', 'author', 'categoryCode', 'category', 'description',
+          'coverUrl', 'audioUrl', 'isbn', 'callNumber', 'tags', 'moods',
+          'readingLevel', 'recommendedGrades', 'estimatedReadingMinutes',
+          'matchReason', 'active', 'displayOrder', 'normalizedTitle',
+          'normalizedAuthor', 'normalizedTitleAuthor', 'bookUniqueKey',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'lastAuditId'
+        ])
+        && request.resource.data.id == bookId
+        && shortText(request.resource.data.title, 1, 300)
+        && shortText(request.resource.data.author, 1, 300)
+        && request.resource.data.categoryCode.matches('^[0-9]{3}$')
+        && request.resource.data.category is string
+        && request.resource.data.category.size() <= 200
+        && shortText(request.resource.data.description, 1, 5000)
+        && request.resource.data.coverUrl is string
+        && request.resource.data.coverUrl.size() <= 2000
+        && request.resource.data.audioUrl is string
+        && request.resource.data.audioUrl.size() <= 2000
+        && request.resource.data.isbn is string
+        && request.resource.data.isbn.size() <= 80
+        && request.resource.data.callNumber is string
+        && request.resource.data.callNumber.size() <= 120
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 30
+        && request.resource.data.moods is list
+        && request.resource.data.moods.size() >= 1
+        && request.resource.data.moods.size() <= 3
+        && request.resource.data.readingLevel is string
+        && request.resource.data.readingLevel.size() <= 120
+        && request.resource.data.recommendedGrades is string
+        && request.resource.data.recommendedGrades.size() <= 120
+        && (request.resource.data.estimatedReadingMinutes == null
+          || (request.resource.data.estimatedReadingMinutes is int
+            && request.resource.data.estimatedReadingMinutes >= 0))
+        && request.resource.data.matchReason is string
+        && request.resource.data.matchReason.size() <= 1000
+        && request.resource.data.active is bool
+        && request.resource.data.displayOrder is int
+        && request.resource.data.displayOrder >= 0
+        && shortText(request.resource.data.normalizedTitle, 1, 300)
+        && shortText(request.resource.data.normalizedAuthor, 1, 300)
+        && request.resource.data.normalizedTitleAuthor
+          == request.resource.data.normalizedTitle + '\u0000' + request.resource.data.normalizedAuthor
+        && request.resource.data.bookUniqueKey.matches('^[a-f0-9]{64}$')
+        && request.resource.data.createdAt is timestamp
+        && shortText(request.resource.data.createdBy, 1, 128)
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid
+        && shortText(request.resource.data.lastAuditId, 1, 128);
+    }
+
+    function validBookCreateFields() {
+      return request.resource.data.keys().hasOnly([
+          'id', 'title', 'author', 'categoryCode', 'category', 'description',
+          'coverUrl', 'audioUrl', 'isbn', 'callNumber', 'tags', 'moods',
+          'readingLevel', 'recommendedGrades', 'estimatedReadingMinutes',
+          'matchReason', 'active', 'displayOrder', 'normalizedTitle',
+          'normalizedAuthor', 'normalizedTitleAuthor', 'bookUniqueKey',
+          'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'lastAuditId'
+        ])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    function validBookUpdateFields() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let createdAtValid = (resource.data.createdAt is timestamp)
+        ? request.resource.data.createdAt == resource.data.createdAt
+        : request.resource.data.createdAt == request.time;
+      let createdByValid = (resource.data.createdBy is string)
+        ? request.resource.data.createdBy == resource.data.createdBy
+        : request.resource.data.createdBy == request.auth.uid;
+      return changed.hasOnly([
+          'title', 'author', 'categoryCode', 'category', 'description', 'coverUrl',
+          'audioUrl', 'isbn', 'callNumber', 'tags', 'moods', 'readingLevel',
+          'recommendedGrades', 'estimatedReadingMinutes', 'matchReason', 'active',
+          'displayOrder', 'normalizedTitle', 'normalizedAuthor',
+          'normalizedTitleAuthor', 'bookUniqueKey', 'createdAt', 'createdBy',
+          'updatedAt', 'updatedBy', 'lastAuditId'
+        ])
+        && request.resource.data.id == resource.data.id
+        && createdAtValid
+        && createdByValid;
+    }
+
+    function validLinkedUnique(bookId) {
+      let uniquePath = /databases/$(database)/documents/bookUniqueKeys/$(request.resource.data.bookUniqueKey);
+      let unique = getAfter(uniquePath).data;
+      return existsAfter(uniquePath)
+        && unique.bookId == bookId
+        && unique.normalizedTitle == request.resource.data.normalizedTitle
+        && unique.normalizedAuthor == request.resource.data.normalizedAuthor
+        && unique.lastAuditId == request.resource.data.lastAuditId
+        && unique.updatedAt == request.time;
+    }
+
+    function validLinkedAudit(bookId, isCreate) {
+      let auditPath = /databases/$(database)/documents/bookAuditLogs/$(request.resource.data.lastAuditId);
+      let audit = getAfter(auditPath).data;
+      let beforeKeyValid = isCreate
+        ? audit.beforeUniqueKey == null
+        : (!(resource.data.bookUniqueKey is string)
+          || audit.beforeUniqueKey == resource.data.bookUniqueKey);
+      let actionValid = isCreate
+        ? audit.action == 'create'
+        : (audit.action == 'update'
+          || (audit.action == 'archive'
+            && resource.data.active == true
+            && request.resource.data.active == false
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'active', 'bookUniqueKey', 'createdAt', 'createdBy',
+              'updatedAt', 'updatedBy', 'lastAuditId'
+            ]))
+          || (audit.action == 'restore'
+            && resource.data.active == false
+            && request.resource.data.active == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'active', 'bookUniqueKey', 'createdAt', 'createdBy',
+              'updatedAt', 'updatedBy', 'lastAuditId'
+            ])));
+      return existsAfter(auditPath)
+        && audit.bookId == bookId
+        && audit.actorUid == request.auth.uid
+        && audit.actorEmail == 'paopornpimon@gmail.com'
+        && audit.afterActive == request.resource.data.active
+        && audit.afterUniqueKey == request.resource.data.bookUniqueKey
+        && audit.title == request.resource.data.title
+        && audit.author == request.resource.data.author
+        && audit.createdAt == request.time
+        && beforeKeyValid
+        && actionValid;
+    }
+
+    match /books/{bookId} {
+      // Student queries must prove active == true; admins can include hidden books.
+      allow read: if isAdmin() || (signedIn() && resource.data.active == true);
+      allow create: if isAdmin()
+        && validBookCore(bookId)
+        && validBookCreateFields()
+        && validLinkedUnique(bookId)
+        && validLinkedAudit(bookId, true);
+      allow update: if isAdmin()
+        && validBookCore(bookId)
+        && validBookUpdateFields()
+        && validLinkedUnique(bookId)
+        && validLinkedAudit(bookId, false);
+      allow delete: if false;
+    }
+
+    function validUniqueWrite(keyId) {
+      let bookPath = /databases/$(database)/documents/books/$(request.resource.data.bookId);
+      let book = getAfter(bookPath).data;
+      let auditPath = /databases/$(database)/documents/bookAuditLogs/$(request.resource.data.lastAuditId);
+      let audit = getAfter(auditPath).data;
+      return request.resource.data.keys().hasOnly([
+          'bookId', 'normalizedTitle', 'normalizedAuthor', 'updatedAt', 'lastAuditId'
+        ])
+        && shortText(request.resource.data.bookId, 1, 128)
+        && request.resource.data.normalizedTitle is string
+        && request.resource.data.normalizedAuthor is string
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.lastAuditId, 1, 128)
+        && existsAfter(bookPath)
+        && book.bookUniqueKey == keyId
+        && book.normalizedTitle == request.resource.data.normalizedTitle
+        && book.normalizedAuthor == request.resource.data.normalizedAuthor
+        && book.lastAuditId == request.resource.data.lastAuditId
+        && audit.bookId == request.resource.data.bookId
+        && audit.afterUniqueKey == keyId;
+    }
+
+    function validUniqueDelete(keyId) {
+      let bookPath = /databases/$(database)/documents/books/$(resource.data.bookId);
+      let book = getAfter(bookPath).data;
+      let auditPath = /databases/$(database)/documents/bookAuditLogs/$(book.lastAuditId);
+      let audit = getAfter(auditPath).data;
+      return existsAfter(bookPath)
+        && book.bookUniqueKey != keyId
+        && book.updatedAt == request.time
+        && audit.bookId == resource.data.bookId
+        && audit.beforeUniqueKey == keyId
+        && audit.afterUniqueKey == book.bookUniqueKey;
+    }
+
+    match /bookUniqueKeys/{keyId} {
+      allow get: if isAdmin();
+      allow list: if false;
+      allow create: if isAdmin() && validUniqueWrite(keyId);
+      allow update: if isAdmin()
+        && request.resource.data.bookId == resource.data.bookId
+        && validUniqueWrite(keyId);
+      allow delete: if isAdmin() && validUniqueDelete(keyId);
+    }
+
+    function validAuditCreate(auditId) {
+      let bookPath = /databases/$(database)/documents/books/$(request.resource.data.bookId);
+      let afterBook = getAfter(bookPath).data;
+      let uniquePath = /databases/$(database)/documents/bookUniqueKeys/$(request.resource.data.afterUniqueKey);
+      let afterUnique = getAfter(uniquePath).data;
+      let createTransition = !exists(bookPath)
+        && request.resource.data.action == 'create'
+        && request.resource.data.beforeActive == null
+        && request.resource.data.beforeUniqueKey == null;
+      let existingTransition = exists(bookPath)
+        && request.resource.data.beforeActive == get(bookPath).data.active
+        && (!(get(bookPath).data.bookUniqueKey is string)
+          || request.resource.data.beforeUniqueKey == get(bookPath).data.bookUniqueKey)
+        && (request.resource.data.action == 'update'
+          || (request.resource.data.action == 'archive'
+            && get(bookPath).data.active == true
+            && afterBook.active == false)
+          || (request.resource.data.action == 'restore'
+            && get(bookPath).data.active == false
+            && afterBook.active == true));
+      return request.resource.data.keys().hasOnly([
+          'action', 'bookId', 'actorUid', 'actorEmail', 'title', 'author',
+          'beforeActive', 'afterActive', 'beforeUniqueKey', 'afterUniqueKey',
+          'changedFields', 'createdAt'
+        ])
+        && request.resource.data.action in ['create', 'update', 'archive', 'restore']
+        && shortText(request.resource.data.bookId, 1, 128)
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.actorEmail == 'paopornpimon@gmail.com'
+        && shortText(request.resource.data.title, 1, 300)
+        && shortText(request.resource.data.author, 1, 300)
+        && (request.resource.data.beforeActive == null
+          || request.resource.data.beforeActive is bool)
+        && request.resource.data.afterActive is bool
+        && (request.resource.data.beforeUniqueKey == null
+          || request.resource.data.beforeUniqueKey.matches('^[a-f0-9]{64}$'))
+        && request.resource.data.afterUniqueKey.matches('^[a-f0-9]{64}$')
+        && request.resource.data.changedFields is list
+        && request.resource.data.changedFields.size() <= 30
+        && request.resource.data.createdAt == request.time
+        && existsAfter(bookPath)
+        && afterBook.lastAuditId == auditId
+        && afterBook.active == request.resource.data.afterActive
+        && afterBook.bookUniqueKey == request.resource.data.afterUniqueKey
+        && existsAfter(uniquePath)
+        && afterUnique.bookId == request.resource.data.bookId
+        && afterUnique.lastAuditId == auditId
+        && (createTransition || existingTransition);
+    }
+
+    match /bookAuditLogs/{auditId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && validAuditCreate(auditId);
+      allow update, delete: if false;
+    }
+
+    match /adminRequests/{requestId} {
+      allow read, write: if false;
+    }
+  }
+}
+

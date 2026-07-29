@@ -1,0 +1,6 @@
+category_id,category_name,icon,active,display_order
+fiction,นิยาย,📚,TRUE,1
+short-story,เรื่องสั้น,📄,TRUE,2
+mystery,สืบสวน,🔎,TRUE,3
+fantasy,แฟนตาซี,🪄,TRUE,4
+science,วิทยาศาสตร์,🧪,TRUE,5

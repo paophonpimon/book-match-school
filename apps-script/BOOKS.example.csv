@@ -1,0 +1,3 @@
+book_id,title,author,category_id,mood_tags,description,cover_url,audio_url,shelf_code,shelf_description,featured,active,display_order,popularity,accent
+wonder,มหัศจรรย์ของออกัสต์,อาร์. เจ. ปาลาซิโอ,fiction,"inspire,relax",เรื่องราวอบอุ่นของเด็กชายผู้ชวนทุกคนมองความต่างด้วยหัวใจ,https://covers.openlibrary.org/b/isbn/9780375869020-L.jpg,,FIC A-12,ชั้นนิยายเยาวชน แถว A ช่องที่ 12,TRUE,TRUE,1,96,#e8896e
+little-prince,เจ้าชายน้อย,อองตวน เดอ แซ็งเต็กซูเปรี,literature,"short,inspire",นิทานปรัชญาที่ชวนมองความรักและมิตรภาพ,https://covers.openlibrary.org/b/isbn/9780156012195-L.jpg,,LIT A-02,ชั้นวรรณกรรมคลาสสิก แถว A ช่องที่ 2,TRUE,TRUE,2,98,#e4a347

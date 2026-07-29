@@ -1,0 +1,653 @@
+import { getApps, initializeApp, type FirebaseApp } from 'firebase/app'
+import {
+  GoogleAuthProvider,
+  browserLocalPersistence,
+  getAuth,
+  getRedirectResult,
+  onAuthStateChanged,
+  setPersistence,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut,
+  type Auth,
+  type User,
+} from 'firebase/auth'
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  query,
+  runTransaction,
+  serverTimestamp,
+  where,
+  type Firestore,
+} from 'firebase/firestore'
+import type {
+  AcademicTerm,
+  BookStatus,
+  Profile,
+  Reader,
+  ReaderStats,
+  StudentMembership,
+  UserBook,
+} from '../types'
+import { applyCompletion, applyStatusTransition, countersForCurrentStatus, emptyBookCounters, planLikeTransaction, planSavedTransaction, type BookCounters } from '../utils/firestoreCounters'
+import { getReaderLevel } from '../utils/readerLevels'
+import { assertMembershipRegistrationAvailable } from '../utils/membership'
+import { planLifetimeReadCredit } from '../utils/readerStats'
+import { env, firebaseConfigured } from './env'
+import { bookStatsWriteFields, buildUserBookWritePayload, hasExactFields, progressWriteFields, userBookWriteFields } from './firestorePayloads'
+
+let firebaseApp: FirebaseApp | null = null
+let authInstance: Auth | null = null
+let firestoreInstance: Firestore | null = null
+let initializationError: Error | null = null
+
+if (firebaseConfigured) {
+  try {
+    firebaseApp = getApps()[0] ?? initializeApp(env.firebase)
+    authInstance = getAuth(firebaseApp)
+    try {
+      firestoreInstance = initializeFirestore(firebaseApp, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      })
+    } catch {
+      firestoreInstance = getFirestore(firebaseApp)
+    }
+  } catch (error) {
+    initializationError = error instanceof Error ? error : new Error('Firebase initialization failed')
+  }
+}
+
+export const auth = authInstance
+export const db = firestoreInstance
+
+export function getFirebaseRuntimeStatus() {
+  return {
+    configured: firebaseConfigured,
+    available: Boolean(firebaseApp && auth && db && !initializationError),
+    error: initializationError,
+  }
+}
+
+export function subscribeStudentUser(
+  callback: (user: User | null) => void,
+  onError?: (error: Error) => void,
+) {
+  if (!auth) {
+    callback(null)
+    return () => {}
+  }
+  return onAuthStateChanged(auth, callback, (error) => onError?.(error))
+}
+
+export function currentStudentUser() {
+  return auth?.currentUser ?? null
+}
+
+export async function completeStudentRedirectSignIn() {
+  if (!auth) return null
+  await setPersistence(auth, browserLocalPersistence)
+  return (await getRedirectResult(auth))?.user ?? auth.currentUser
+}
+
+export async function signInStudentWithGoogle() {
+  if (!auth) throw new Error('Firebase Authentication ยังไม่พร้อมใช้งาน')
+  await setPersistence(auth, browserLocalPersistence)
+  const provider = new GoogleAuthProvider()
+  provider.setCustomParameters({ prompt: 'select_account' })
+  try {
+    return (await signInWithPopup(auth, provider)).user
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+    if (code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) {
+      throw new Error('ยกเลิกการเข้าสู่ระบบด้วย Google แล้ว')
+    }
+    if (code.includes('popup-blocked') || code.includes('operation-not-supported-in-this-environment')) {
+      await signInWithRedirect(auth, provider)
+      return null
+    }
+    throw error
+  }
+}
+
+export async function signOutStudentUser() {
+  if (!auth) return
+  await signOut(auth)
+}
+
+function asIso(value: unknown) {
+  if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') return value.toDate().toISOString()
+  return typeof value === 'string' ? value : new Date().toISOString()
+}
+
+function isBookStatus(value: unknown): value is BookStatus {
+  return ['liked', 'saved', 'reading', 'read'].includes(String(value))
+}
+
+function countersFrom(data: Record<string, unknown> | undefined): BookCounters {
+  if (!data) return { ...emptyBookCounters }
+  return {
+    likeCount: Number(data.likeCount ?? 0),
+    saveCount: Number(data.saveCount ?? 0),
+    readingCount: Number(data.readingCount ?? 0),
+    readCount: Number(data.readCount ?? 0),
+    ratingTotal: Number(data.ratingTotal ?? 0),
+    ratingCount: Number(data.ratingCount ?? 0),
+  }
+}
+
+function requireFirestore() {
+  if (!db) throw new Error('Firebase ยังไม่พร้อมใช้งาน')
+  return db
+}
+
+function verifiedStudentUser() {
+  const user = auth?.currentUser
+  if (!user) throw new Error('กรุณาเข้าสู่ระบบด้วย Google ก่อน')
+  if (!user.email || !user.emailVerified) {
+    throw new Error('บัญชี Google ต้องมีอีเมลที่ยืนยันแล้ว')
+  }
+  return user
+}
+
+function normalizeMembership(data: Record<string, unknown>): StudentMembership {
+  return {
+    studentId: String(data.studentId ?? ''),
+    uid: String(data.uid ?? ''),
+    email: String(data.email ?? ''),
+    status: ['active', 'suspended', 'graduated', 'transferred'].includes(String(data.status))
+      ? data.status as StudentMembership['status']
+      : 'suspended',
+    createdAt: asIso(data.createdAt),
+    updatedAt: asIso(data.updatedAt),
+  }
+}
+
+function normalizeReaderStats(uid: string, data?: Record<string, unknown>): ReaderStats {
+  const lifetimeReadCount = Math.max(0, Number(data?.lifetimeReadCount ?? 0))
+  return {
+    uid,
+    lifetimeReadCount,
+    currentLevel: getReaderLevel(lifetimeReadCount).level,
+    updatedAt: data?.updatedAt ? asIso(data.updatedAt) : new Date(0).toISOString(),
+    lastCreditedUserBookId: typeof data?.lastCreditedUserBookId === 'string'
+      ? data.lastCreditedUserBookId
+      : null,
+  }
+}
+
+export async function loadCurrentTermRemote(): Promise<AcademicTerm | null> {
+  const firestore = requireFirestore()
+  const settingsSnapshot = await getDoc(doc(firestore, 'settings', 'currentTerm'))
+  const termId = String(settingsSnapshot.data()?.termId ?? '').trim()
+  if (!termId) return null
+  const termSnapshot = await getDoc(doc(firestore, 'terms', termId))
+  if (!termSnapshot.exists()) throw new Error(`ไม่พบข้อมูลภาคเรียน ${termId}`)
+  const data = termSnapshot.data()
+  return {
+    id: termSnapshot.id,
+    name: String(data.name ?? termId),
+    academicYear: Number(data.academicYear ?? 0),
+    semester: Number(data.semester) === 2 ? 2 : 1,
+    startDate: asIso(data.startDate),
+    endDate: asIso(data.endDate),
+    status: ['draft', 'active', 'closed'].includes(String(data.status))
+      ? data.status as AcademicTerm['status']
+      : 'draft',
+    createdAt: asIso(data.createdAt),
+    updatedAt: asIso(data.updatedAt),
+    createdBy: String(data.createdBy ?? ''),
+    updatedBy: String(data.updatedBy ?? ''),
+  }
+}
+
+export async function saveProfileRemote(profile: Profile, termId: string) {
+  const firestore = requireFirestore()
+  const user = verifiedStudentUser()
+  if (user.uid !== profile.uid) throw new Error('UID ของโปรไฟล์ไม่ตรงกับบัญชี Google')
+  const studentId = profile.studentId?.trim() ?? ''
+  if (!studentId) throw new Error('กรุณาระบุเลขประจำตัวนักเรียน')
+  const profileRef = doc(firestore, 'profiles', profile.uid)
+  const progressRef = doc(firestore, 'progress', `${termId}_${profile.uid}`)
+  const membershipRef = doc(firestore, 'studentMemberships', studentId)
+  const membershipUidRef = doc(firestore, 'studentMembershipUids', profile.uid)
+  await runTransaction(firestore, async (transaction) => {
+    const [profileSnapshot, progressSnapshot, membershipSnapshot, membershipUidSnapshot] = await Promise.all([
+      transaction.get(profileRef),
+      transaction.get(progressRef),
+      transaction.get(membershipRef),
+      transaction.get(membershipUidRef),
+    ])
+    const previousProfile = profileSnapshot.data()
+    const previousStudentId = typeof previousProfile?.studentId === 'string' ? previousProfile.studentId : ''
+    assertMembershipRegistrationAvailable({
+      requestedStudentId: studentId,
+      requestedUid: profile.uid,
+      existingProfileStudentId: previousStudentId || undefined,
+      existingMembershipUid: membershipSnapshot.exists() ? String(membershipSnapshot.data().uid ?? '') : undefined,
+      existingUidLockStudentId: membershipUidSnapshot.exists() ? String(membershipUidSnapshot.data().studentId ?? '') : undefined,
+    })
+    const timestamp = serverTimestamp()
+    if (!membershipUidSnapshot.exists()) {
+      transaction.set(membershipUidRef, {
+        uid: profile.uid,
+        studentId,
+        email: user.email!.toLocaleLowerCase('en-US'),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    }
+    if (!membershipSnapshot.exists()) {
+      transaction.set(membershipRef, {
+        studentId,
+        uid: profile.uid,
+        email: user.email!.toLocaleLowerCase('en-US'),
+        status: 'active',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    }
+    transaction.set(profileRef, {
+      uid: profile.uid,
+      displayName: profile.displayName,
+      className: profile.className,
+      studentNumber: profile.studentNumber,
+      ...(profile.studentId && profile.firstName && profile.lastName && profile.gradeLevel ? {
+        studentId: profile.studentId,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        gradeLevel: profile.gradeLevel,
+      } : {}),
+      interests: profile.interests,
+      createdAt: previousProfile?.createdAt ?? timestamp,
+      lastActiveAt: timestamp,
+    })
+    const progress = progressSnapshot.data()
+    transaction.set(progressRef, {
+      uid: profile.uid,
+      termId,
+      displayName: profile.displayName,
+      className: profile.className,
+      readCount: Number(progress?.readCount ?? 0),
+      likedCount: Number(progress?.likedCount ?? 0),
+      eligible: progress?.eligible !== false,
+      lastReadAt: progress?.lastReadAt ?? null,
+      updatedAt: timestamp,
+    })
+  })
+}
+
+export async function loadRemoteStudentState(user: User, termId: string): Promise<{
+  profile: Profile | null
+  membership: StudentMembership | null
+  readerStats: ReaderStats
+  userBooks: Record<string, UserBook>
+}> {
+  const firestore = requireFirestore()
+  const profileSnapshot = await getDoc(doc(firestore, 'profiles', user.uid))
+  const profileData = profileSnapshot.data()
+  const studentId = typeof profileData?.studentId === 'string' ? profileData.studentId : ''
+  const [booksSnapshot, membershipSnapshot, readerStatsSnapshot] = await Promise.all([
+    getDocs(query(collection(firestore, 'userBooks'), where('uid', '==', user.uid))),
+    studentId ? getDoc(doc(firestore, 'studentMemberships', studentId)) : Promise.resolve(null),
+    getDoc(doc(firestore, 'readerStats', user.uid)),
+  ])
+  const profile: Profile | null = profileData ? {
+    uid: user.uid,
+    displayName: String(profileData.displayName ?? ''),
+    className: String(profileData.className ?? ''),
+    studentNumber: String(profileData.studentNumber ?? ''),
+    studentId: typeof profileData.studentId === 'string' ? profileData.studentId : undefined,
+    firstName: typeof profileData.firstName === 'string' ? profileData.firstName : undefined,
+    lastName: typeof profileData.lastName === 'string' ? profileData.lastName : undefined,
+    gradeLevel: typeof profileData.gradeLevel === 'string' ? profileData.gradeLevel : undefined,
+    interests: Array.isArray(profileData.interests) ? profileData.interests.map(String) : [],
+    createdAt: asIso(profileData.createdAt),
+    lastActiveAt: asIso(profileData.lastActiveAt),
+  } : null
+  const userBooks: Record<string, UserBook> = {}
+  booksSnapshot.forEach((snapshot) => {
+    const data = snapshot.data()
+    if (String(data.termId) !== termId || !isBookStatus(data.status)) return
+    const bookId = String(data.bookId)
+    userBooks[bookId] = {
+      uid: user.uid,
+      termId,
+      bookId,
+      status: data.status,
+      rating: typeof data.rating === 'number' ? data.rating : null,
+      review: typeof data.review === 'string' ? data.review : null,
+      moodAfterReading: typeof data.moodAfterReading === 'string' ? data.moodAfterReading : null,
+      favoriteAspect: typeof data.favoriteAspect === 'string' ? data.favoriteAspect : null,
+      likedAt: data.likedAt ? asIso(data.likedAt) : null,
+      startedAt: data.startedAt ? asIso(data.startedAt) : null,
+      readAt: data.readAt ? asIso(data.readAt) : null,
+      updatedAt: asIso(data.updatedAt),
+      lifetimeReadCredited: data.lifetimeReadCredited === true,
+      lifetimeCreditedAt: data.lifetimeCreditedAt ? asIso(data.lifetimeCreditedAt) : null,
+    }
+  })
+  return {
+    profile,
+    membership: membershipSnapshot?.exists() ? normalizeMembership(membershipSnapshot.data()) : null,
+    readerStats: normalizeReaderStats(user.uid, readerStatsSnapshot.data()),
+    userBooks,
+  }
+}
+
+export async function loadReadersRemote(termId: string): Promise<Reader[]> {
+  const firestore = requireFirestore()
+  const snapshot = await getDocs(query(collection(firestore, 'progress'), where('termId', '==', termId)))
+  return snapshot.docs.map((item) => {
+    const data = item.data()
+    return {
+      uid: String(data.uid),
+      displayName: String(data.displayName ?? ''),
+      className: String(data.className ?? ''),
+      readCount: Number(data.readCount ?? 0),
+      likedCount: Number(data.likedCount ?? 0),
+      eligible: data.eligible !== false,
+      lastReadAt: data.lastReadAt ? asIso(data.lastReadAt) : null,
+    }
+  })
+}
+
+export async function saveUserBookRemote(userBook: UserBook, profile: Profile) {
+  if (userBook.status === 'read') throw new Error('ต้องยืนยันการอ่านผ่าน transaction เท่านั้น')
+  if (userBook.status === 'liked') throw new Error('ต้องบันทึกการกดชอบผ่าน like transaction เท่านั้น')
+  if (userBook.status === 'saved') throw new Error('ต้องบันทึกการเก็บหนังสือผ่าน save transaction เท่านั้น')
+  const firestore = requireFirestore()
+  const recordId = `${userBook.termId}_${userBook.uid}_${userBook.bookId}`
+  const userBookRef = doc(firestore, 'userBooks', recordId)
+  const progressRef = doc(firestore, 'progress', `${userBook.termId}_${userBook.uid}`)
+  const statsRef = doc(firestore, 'bookStats', `${userBook.termId}_${userBook.bookId}`)
+  await runTransaction(firestore, async (transaction) => {
+    const [previousSnapshot, progressSnapshot, statsSnapshot] = await Promise.all([
+      transaction.get(userBookRef),
+      transaction.get(progressRef),
+      transaction.get(statsRef),
+    ])
+    const previous = previousSnapshot.data()
+    const previousStatus = isBookStatus(previous?.status) ? previous.status : undefined
+    const nextCounters = statsSnapshot.exists()
+      ? applyStatusTransition(countersFrom(statsSnapshot.data()), previousStatus, userBook.status)
+      : countersForCurrentStatus(userBook.status, Boolean(previous?.likedAt) || userBook.status === 'liked')
+    const progress = progressSnapshot.data()
+    transaction.set(userBookRef, buildUserBookWritePayload(userBook, previous, userBook.status, serverTimestamp()))
+    transaction.set(progressRef, {
+      uid: userBook.uid,
+      termId: userBook.termId,
+      displayName: profile.displayName,
+      className: profile.className,
+      readCount: Number(progress?.readCount ?? 0),
+      likedCount: Number(progress?.likedCount ?? 0),
+      eligible: progress?.eligible !== false,
+      lastReadAt: progress?.lastReadAt ?? null,
+      updatedAt: serverTimestamp(),
+    })
+    transaction.set(statsRef, {
+      termId: userBook.termId,
+      bookId: userBook.bookId,
+      ...nextCounters,
+      lastUpdatedBy: userBook.uid,
+      updatedAt: serverTimestamp(),
+    })
+  })
+}
+
+type BookOperation = 'save-user-book' | 'update-progress-like' | 'update-book-stats-like' | 'update-book-stats-save'
+
+function logBookTransactionFailure(error: unknown, operations: { operation: BookOperation; path: string }[]) {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : 'unknown'
+  const message = error instanceof Error ? error.message : String(error)
+  operations.forEach(({ operation, path }) => {
+    console.error(`[Firestore] ${operation} failed`, { operation, path, code, message })
+  })
+}
+
+function assertBookPayload(operation: BookOperation, path: string, payload: Record<string, unknown>, fields: readonly string[]) {
+  if (hasExactFields(payload, fields)) return
+  const error = new Error(`${operation} payload ไม่ตรง schema: ${path}`)
+  console.error(`[Firestore] ${operation} failed`, { operation, path, code: 'invalid-payload', message: error.message })
+  throw error
+}
+
+export async function saveLikedBookRemote(userBook: UserBook, profile: Profile) {
+  if (userBook.status !== 'liked') throw new Error('like transaction รองรับเฉพาะสถานะ liked')
+  const firestore = requireFirestore()
+  const userBookPath = `userBooks/${userBook.termId}_${userBook.uid}_${userBook.bookId}`
+  const progressPath = `progress/${userBook.termId}_${userBook.uid}`
+  const statsPath = `bookStats/${userBook.termId}_${userBook.bookId}`
+  const operations: { operation: BookOperation; path: string }[] = [
+    { operation: 'save-user-book', path: userBookPath },
+    { operation: 'update-progress-like', path: progressPath },
+    { operation: 'update-book-stats-like', path: statsPath },
+  ]
+  const userBookRef = doc(firestore, userBookPath)
+  const progressRef = doc(firestore, progressPath)
+  const statsRef = doc(firestore, statsPath)
+  try {
+    return await runTransaction(firestore, async (transaction) => {
+      const [previousSnapshot, progressSnapshot, statsSnapshot] = await Promise.all([
+        transaction.get(userBookRef), transaction.get(progressRef), transaction.get(statsRef),
+      ])
+      const previous = previousSnapshot.data()
+      const previousStatus = isBookStatus(previous?.status) ? previous.status : undefined
+      const progress = progressSnapshot.data()
+      const plan = planLikeTransaction(Number(progress?.likedCount ?? 0), countersFrom(statsSnapshot.data()), previousStatus)
+      const nextCounters = statsSnapshot.exists()
+        ? plan.counters
+        : countersForCurrentStatus(plan.status, Boolean(previous?.likedAt) || plan.status === 'liked', typeof previous?.rating === 'number' ? previous.rating : null)
+      const timestamp = serverTimestamp()
+      const userBookPayload = buildUserBookWritePayload(userBook, previous, plan.status, timestamp)
+      const progressPayload = {
+        uid: userBook.uid,
+        termId: userBook.termId,
+        displayName: profile.displayName,
+        className: profile.className,
+        readCount: Number(progress?.readCount ?? 0),
+        likedCount: plan.progressLikedCount,
+        eligible: progress?.eligible !== false,
+        lastReadAt: progress?.lastReadAt ?? null,
+        updatedAt: timestamp,
+      }
+      const statsPayload = {
+        termId: userBook.termId,
+        bookId: userBook.bookId,
+        ...nextCounters,
+        lastUpdatedBy: userBook.uid,
+        updatedAt: timestamp,
+      }
+      assertBookPayload('save-user-book', userBookPath, userBookPayload, userBookWriteFields)
+      assertBookPayload('update-progress-like', progressPath, progressPayload, progressWriteFields)
+      assertBookPayload('update-book-stats-like', statsPath, statsPayload, bookStatsWriteFields)
+      transaction.set(userBookRef, userBookPayload)
+      transaction.set(progressRef, progressPayload)
+      transaction.set(statsRef, statsPayload)
+      return { status: plan.status, counted: plan.counted }
+    })
+  } catch (error) {
+    logBookTransactionFailure(error, operations)
+    throw error
+  }
+}
+
+export async function saveSavedBookRemote(userBook: UserBook) {
+  if (userBook.status !== 'saved') throw new Error('save transaction รองรับเฉพาะสถานะ saved')
+  const firestore = requireFirestore()
+  const userBookPath = `userBooks/${userBook.termId}_${userBook.uid}_${userBook.bookId}`
+  const statsPath = `bookStats/${userBook.termId}_${userBook.bookId}`
+  const operations: { operation: BookOperation; path: string }[] = [
+    { operation: 'save-user-book', path: userBookPath },
+    { operation: 'update-book-stats-save', path: statsPath },
+  ]
+  const userBookRef = doc(firestore, userBookPath)
+  const statsRef = doc(firestore, statsPath)
+  try {
+    return await runTransaction(firestore, async (transaction) => {
+      const [previousSnapshot, statsSnapshot] = await Promise.all([
+        transaction.get(userBookRef), transaction.get(statsRef),
+      ])
+      const previous = previousSnapshot.data()
+      const previousStatus = isBookStatus(previous?.status) ? previous.status : undefined
+      const plan = planSavedTransaction(countersFrom(statsSnapshot.data()), previousStatus)
+      const nextCounters = statsSnapshot.exists()
+        ? plan.counters
+        : countersForCurrentStatus(plan.status, Boolean(previous?.likedAt), typeof previous?.rating === 'number' ? previous.rating : null)
+      const timestamp = serverTimestamp()
+      const userBookPayload = buildUserBookWritePayload(userBook, previous, plan.status, timestamp)
+      const statsPayload = {
+        termId: userBook.termId,
+        bookId: userBook.bookId,
+        ...nextCounters,
+        lastUpdatedBy: userBook.uid,
+        updatedAt: timestamp,
+      }
+      assertBookPayload('save-user-book', userBookPath, userBookPayload, userBookWriteFields)
+      assertBookPayload('update-book-stats-save', statsPath, statsPayload, bookStatsWriteFields)
+      transaction.set(userBookRef, userBookPayload)
+      transaction.set(statsRef, statsPayload)
+      return { status: plan.status, counted: plan.counted }
+    })
+  } catch (error) {
+    logBookTransactionFailure(error, operations)
+    throw error
+  }
+}
+
+export async function deleteUserBookRemote(userBook: UserBook, profile: Profile) {
+  const firestore = requireFirestore()
+  const userBookRef = doc(firestore, 'userBooks', `${userBook.termId}_${userBook.uid}_${userBook.bookId}`)
+  const progressRef = doc(firestore, 'progress', `${userBook.termId}_${userBook.uid}`)
+  const statsRef = doc(firestore, 'bookStats', `${userBook.termId}_${userBook.bookId}`)
+  await runTransaction(firestore, async (transaction) => {
+    const [previousSnapshot, progressSnapshot, statsSnapshot] = await Promise.all([
+      transaction.get(userBookRef), transaction.get(progressRef), transaction.get(statsRef),
+    ])
+    const previous = previousSnapshot.data()
+    if (!previousSnapshot.exists() || !isBookStatus(previous?.status)) return
+    const nextCounters = applyStatusTransition(countersFrom(statsSnapshot.data()), previous.status, undefined)
+    const progress = progressSnapshot.data()
+    transaction.delete(userBookRef)
+    transaction.set(progressRef, {
+      uid: userBook.uid,
+      termId: userBook.termId,
+      displayName: profile.displayName,
+      className: profile.className,
+      readCount: Number(progress?.readCount ?? 0),
+      likedCount: Math.max(0, Number(progress?.likedCount ?? 0) - (previous.status === 'liked' ? 1 : 0)),
+      eligible: progress?.eligible !== false,
+      lastReadAt: progress?.lastReadAt ?? null,
+      updatedAt: serverTimestamp(),
+    })
+    if (statsSnapshot.exists()) {
+      transaction.set(statsRef, {
+        termId: userBook.termId,
+        bookId: userBook.bookId,
+        ...nextCounters,
+        lastUpdatedBy: userBook.uid,
+        updatedAt: serverTimestamp(),
+      })
+    }
+  })
+}
+
+export interface CompleteBookResult {
+  counted: boolean
+  levelUp: boolean
+  readerStats: ReaderStats
+}
+
+export async function completeBookRemote(userBook: UserBook, profile: Profile): Promise<CompleteBookResult> {
+  if (!userBook.rating || userBook.rating < 1 || userBook.rating > 5) throw new Error('คะแนนรีวิวไม่ถูกต้อง')
+  const review = userBook.review?.trim() ?? ''
+  if (review.length < 20 || review.length > 300 || !userBook.moodAfterReading || !userBook.favoriteAspect) throw new Error('ข้อมูลรีวิวไม่ครบถ้วน')
+  const firestore = requireFirestore()
+  const userBookRef = doc(firestore, 'userBooks', `${userBook.termId}_${userBook.uid}_${userBook.bookId}`)
+  const progressRef = doc(firestore, 'progress', `${userBook.termId}_${userBook.uid}`)
+  const statsRef = doc(firestore, 'bookStats', `${userBook.termId}_${userBook.bookId}`)
+  const readerStatsRef = doc(firestore, 'readerStats', userBook.uid)
+  return runTransaction(firestore, async (transaction) => {
+    const [previousSnapshot, progressSnapshot, statsSnapshot, readerStatsSnapshot] = await Promise.all([
+      transaction.get(userBookRef), transaction.get(progressRef), transaction.get(statsRef),
+      transaction.get(readerStatsRef),
+    ])
+    const previous = previousSnapshot.data()
+    const previousStatus = isBookStatus(previous?.status) ? previous.status : undefined
+    const previousReaderStats = normalizeReaderStats(userBook.uid, readerStatsSnapshot.data())
+    if (previousStatus === 'read' || previous?.lifetimeReadCredited === true) {
+      return { counted: false, levelUp: false, readerStats: previousReaderStats }
+    }
+    const progress = progressSnapshot.data()
+    const creditPlan = planLifetimeReadCredit(
+      previousStatus,
+      previous?.lifetimeReadCredited === true,
+      previousReaderStats.lifetimeReadCount,
+    )
+    const nextLifetimeReadCount = creditPlan.lifetimeReadCount
+    const nextLevel = creditPlan.currentLevel
+    const timestamp = serverTimestamp()
+    const userBookRecordId = `${userBook.termId}_${userBook.uid}_${userBook.bookId}`
+    const nextCounters = statsSnapshot.exists()
+      ? applyCompletion(countersFrom(statsSnapshot.data()), previousStatus, userBook.rating!)
+      : countersForCurrentStatus('read', Boolean(previous?.likedAt), userBook.rating!)
+    transaction.set(userBookRef, {
+      uid: userBook.uid,
+      termId: userBook.termId,
+      bookId: userBook.bookId,
+      status: 'read',
+      rating: userBook.rating,
+      review,
+      moodAfterReading: userBook.moodAfterReading,
+      favoriteAspect: userBook.favoriteAspect,
+      likedAt: previous?.likedAt ?? null,
+      startedAt: previous?.startedAt ?? null,
+      readAt: timestamp,
+      updatedAt: timestamp,
+      lifetimeReadCredited: true,
+      lifetimeCreditedAt: timestamp,
+    })
+    transaction.set(progressRef, {
+      uid: userBook.uid,
+      termId: userBook.termId,
+      displayName: profile.displayName,
+      className: profile.className,
+      readCount: Number(progress?.readCount ?? 0) + 1,
+      likedCount: Number(progress?.likedCount ?? 0),
+      eligible: progress?.eligible !== false,
+      lastReadAt: timestamp,
+      updatedAt: timestamp,
+    })
+    transaction.set(statsRef, {
+      termId: userBook.termId,
+      bookId: userBook.bookId,
+      ...nextCounters,
+      lastUpdatedBy: userBook.uid,
+      updatedAt: timestamp,
+    })
+    transaction.set(readerStatsRef, {
+      uid: userBook.uid,
+      lifetimeReadCount: nextLifetimeReadCount,
+      currentLevel: nextLevel,
+      updatedAt: timestamp,
+      lastCreditedUserBookId: userBookRecordId,
+    })
+    return {
+      counted: true,
+      levelUp: creditPlan.levelUp,
+      readerStats: {
+        uid: userBook.uid,
+        lifetimeReadCount: nextLifetimeReadCount,
+        currentLevel: nextLevel,
+        updatedAt: new Date().toISOString(),
+        lastCreditedUserBookId: userBookRecordId,
+      },
+    }
+  })
+}

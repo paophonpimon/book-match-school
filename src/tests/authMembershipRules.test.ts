@@ -1,0 +1,34 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+const firebaseService = readFileSync(resolve(process.cwd(), 'src/services/firebase.ts'), 'utf8')
+const appContext = readFileSync(resolve(process.cwd(), 'src/app/AppContext.tsx'), 'utf8')
+const rules = readFileSync(resolve(process.cwd(), 'firestore.rules'), 'utf8')
+
+describe('Google student authentication and membership security', () => {
+  it('removes anonymous authentication from the student runtime', () => {
+    expect(firebaseService).not.toContain('signInAnonymously')
+    expect(appContext).not.toContain('ensureAnonymousUser')
+  })
+
+  it('uses Google popup with redirect fallback and restored auth state', () => {
+    expect(firebaseService).toContain('signInWithPopup')
+    expect(firebaseService).toContain('signInWithRedirect')
+    expect(firebaseService).toContain('onAuthStateChanged')
+  })
+
+  it('requires verified token email for membership ownership', () => {
+    expect(rules).toContain('request.auth.token.email_verified == true')
+    expect(rules).toContain('request.resource.data.email == request.auth.token.email')
+  })
+
+  it('restricts suspended members from new student activity', () => {
+    expect(rules).toContain("get(membershipPath).data.status == 'active'")
+    expect(rules).toContain('activeMember(request.resource.data.uid)')
+  })
+
+  it('keeps Admin authorization pinned to the verified Admin email', () => {
+    expect(rules).toContain("request.auth.token.email == 'paopornpimon@gmail.com'")
+  })
+})

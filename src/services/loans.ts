@@ -1,0 +1,483 @@
+import {
+  collection,
+  doc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  Timestamp,
+  where,
+  type DocumentData,
+  type DocumentSnapshot,
+  type Firestore,
+  type QueryDocumentSnapshot,
+} from 'firebase/firestore'
+import type { Book, BookLoanLock, Loan, LoanAuditAction, LoanStatus, Profile } from '../types'
+import {
+  calculateDueAt,
+  DEFAULT_LOAN_DAYS,
+  assertLoanRequestAvailable,
+  MAX_RENEW_COUNT,
+  normalizeLoanDays,
+  planLoanTransition,
+} from '../utils/loans'
+import { getAdminFirebaseContext, getVerifiedAdminFirebaseContext } from './adminAuth'
+import { currentStudentUser, db } from './firebase'
+
+const ADMIN_LOAN_LIMIT = 300
+
+function requireStudentFirestore() {
+  if (!db) throw new Error('Firebase ยังไม่พร้อมใช้งาน')
+  return db
+}
+
+function asIso(value: unknown, fallback = new Date(0).toISOString()) {
+  if (value instanceof Timestamp) return value.toDate().toISOString()
+  if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
+    return value.toDate().toISOString()
+  }
+  return typeof value === 'string' ? value : fallback
+}
+
+function nullableIso(value: unknown) {
+  return value == null ? null : asIso(value)
+}
+
+function isLoanStatus(value: unknown): value is LoanStatus {
+  return ['pending', 'approved', 'borrowed', 'returned', 'rejected', 'cancelled'].includes(String(value))
+}
+
+function normalizeLoanSnapshot(snapshot: QueryDocumentSnapshot<DocumentData> | DocumentSnapshot<DocumentData>): Loan {
+  const data = snapshot.data()
+  if (!data || !isLoanStatus(data.status)) throw new Error(`ข้อมูล Loan ${snapshot.id} ไม่ถูกต้อง`)
+  return {
+    id: snapshot.id,
+    uid: String(data.uid ?? ''),
+    termId: String(data.termId ?? ''),
+    bookId: String(data.bookId ?? ''),
+    status: data.status,
+    requestedAt: asIso(data.requestedAt),
+    approvedAt: nullableIso(data.approvedAt),
+    borrowedAt: nullableIso(data.borrowedAt),
+    dueAt: nullableIso(data.dueAt),
+    returnedAt: nullableIso(data.returnedAt),
+    rejectedAt: nullableIso(data.rejectedAt),
+    cancelledAt: nullableIso(data.cancelledAt),
+    approvedBy: typeof data.approvedBy === 'string' ? data.approvedBy : null,
+    returnedBy: typeof data.returnedBy === 'string' ? data.returnedBy : null,
+    renewCount: Number(data.renewCount ?? 0),
+    loanDays: Number(data.loanDays ?? DEFAULT_LOAN_DAYS),
+    adminNote: String(data.adminNote ?? ''),
+    studentDisplayName: String(data.studentDisplayName ?? ''),
+    studentFirstName: String(data.studentFirstName ?? ''),
+    studentLastName: String(data.studentLastName ?? ''),
+    studentClassroom: String(data.studentClassroom ?? ''),
+    studentNumber: String(data.studentNumber ?? ''),
+    studentId: String(data.studentId ?? ''),
+    bookTitle: String(data.bookTitle ?? ''),
+    bookAuthor: String(data.bookAuthor ?? ''),
+    bookCoverUrl: String(data.bookCoverUrl ?? ''),
+    createdAt: asIso(data.createdAt),
+    updatedAt: asIso(data.updatedAt),
+    lastAuditId: String(data.lastAuditId ?? ''),
+  }
+}
+
+function activeKeyId(uid: string, bookId: string) {
+  return `${uid}_${bookId}`
+}
+
+function auditPayload(
+  action: LoanAuditAction,
+  loanId: string,
+  bookId: string,
+  studentUid: string,
+  previousStatus: LoanStatus | null,
+  nextStatus: LoanStatus,
+  actorUid: string,
+  actorEmail: string | null,
+  note: string,
+) {
+  return {
+    action,
+    loanId,
+    bookId,
+    studentUid,
+    previousStatus,
+    nextStatus,
+    actorUid,
+    actorEmail,
+    note: note.trim(),
+    createdAt: serverTimestamp(),
+  }
+}
+
+export async function loadStudentLoans(uid: string) {
+  const firestore = requireStudentFirestore()
+  const snapshot = await getDocs(query(
+    collection(firestore, 'loans'),
+    where('uid', '==', uid),
+    orderBy('createdAt', 'desc'),
+  ))
+  return snapshot.docs.map(normalizeLoanSnapshot)
+}
+
+export async function loadBookLoanLocks() {
+  const firestore = requireStudentFirestore()
+  const snapshot = await getDocs(collection(firestore, 'bookLoanLocks'))
+  const locks: Record<string, BookLoanLock> = {}
+  snapshot.forEach((item) => {
+    const data = item.data()
+    if (!['approved', 'borrowed'].includes(String(data.status))) return
+    locks[item.id] = {
+      bookId: String(data.bookId ?? item.id),
+      loanId: String(data.loanId ?? ''),
+      status: data.status as BookLoanLock['status'],
+      updatedAt: asIso(data.updatedAt),
+      lastAuditId: String(data.lastAuditId ?? ''),
+    }
+  })
+  return locks
+}
+
+export async function requestLoanRemote(book: Book, profile: Profile, termId: string) {
+  const firestore = requireStudentFirestore()
+  const user = currentStudentUser()
+  if (!user || user.uid !== profile.uid) throw new Error('ไม่พบสิทธิ์ของนักเรียนสำหรับส่งคำขอยืม')
+  const loanRef = doc(collection(firestore, 'loans'))
+  const auditRef = doc(collection(firestore, 'loanAuditLogs'))
+  const activeRef = doc(firestore, 'studentLoanActiveKeys', activeKeyId(user.uid, book.id))
+  const lockRef = doc(firestore, 'bookLoanLocks', book.id)
+  const bookRef = doc(firestore, 'books', book.id)
+
+  await runTransaction(firestore, async (transaction) => {
+    const [activeSnapshot, lockSnapshot, bookSnapshot] = await Promise.all([
+      transaction.get(activeRef),
+      transaction.get(lockRef),
+      transaction.get(bookRef),
+    ])
+    assertLoanRequestAvailable(activeSnapshot.exists(), lockSnapshot.exists())
+    if (!bookSnapshot.exists() || bookSnapshot.data().active !== true) throw new Error('หนังสือเล่มนี้ไม่พร้อมให้ยืม')
+    const timestamp = serverTimestamp()
+    transaction.set(loanRef, {
+      id: loanRef.id,
+      uid: user.uid,
+      termId,
+      bookId: book.id,
+      status: 'pending',
+      requestedAt: timestamp,
+      approvedAt: null,
+      borrowedAt: null,
+      dueAt: null,
+      returnedAt: null,
+      rejectedAt: null,
+      cancelledAt: null,
+      approvedBy: null,
+      returnedBy: null,
+      renewCount: 0,
+      loanDays: DEFAULT_LOAN_DAYS,
+      adminNote: '',
+      studentDisplayName: profile.displayName,
+      studentFirstName: profile.firstName ?? '',
+      studentLastName: profile.lastName ?? '',
+      studentClassroom: profile.className,
+      studentNumber: profile.studentNumber,
+      studentId: profile.studentId ?? '',
+      bookTitle: book.title,
+      bookAuthor: book.author,
+      bookCoverUrl: book.coverUrl,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastAuditId: auditRef.id,
+    })
+    transaction.set(activeRef, {
+      uid: user.uid,
+      bookId: book.id,
+      loanId: loanRef.id,
+      status: 'pending',
+      updatedAt: timestamp,
+      lastAuditId: auditRef.id,
+    })
+    transaction.set(auditRef, auditPayload(
+      'request', loanRef.id, book.id, user.uid, null, 'pending', user.uid, null, '',
+    ))
+  })
+  return loanRef.id
+}
+
+export async function cancelLoanRemote(loan: Loan) {
+  const firestore = requireStudentFirestore()
+  const user = currentStudentUser()
+  if (!user || user.uid !== loan.uid) throw new Error('คุณไม่มีสิทธิ์ยกเลิกคำขอนี้')
+  const loanRef = doc(firestore, 'loans', loan.id)
+  const activeRef = doc(firestore, 'studentLoanActiveKeys', activeKeyId(user.uid, loan.bookId))
+  const auditRef = doc(collection(firestore, 'loanAuditLogs'))
+  return runTransaction(firestore, async (transaction) => {
+    const [loanSnapshot, activeSnapshot] = await Promise.all([
+      transaction.get(loanRef),
+      transaction.get(activeRef),
+    ])
+    if (!loanSnapshot.exists()) throw new Error('ไม่พบคำขอยืม')
+    const current = normalizeLoanSnapshot(loanSnapshot)
+    if (current.status === 'cancelled') return false
+    planLoanTransition(current.status, 'cancelled')
+    if (!activeSnapshot.exists() || activeSnapshot.data().loanId !== loan.id) {
+      throw new Error('ข้อมูลคำขอยืมไม่สอดคล้องกัน กรุณาโหลดใหม่')
+    }
+    const timestamp = serverTimestamp()
+    transaction.update(loanRef, {
+      status: 'cancelled',
+      cancelledAt: timestamp,
+      updatedAt: timestamp,
+      lastAuditId: auditRef.id,
+    })
+    transaction.delete(activeRef)
+    transaction.set(auditRef, auditPayload(
+      'cancel', loan.id, loan.bookId, user.uid, 'pending', 'cancelled', user.uid, null, '',
+    ))
+    return true
+  })
+}
+
+function adminRefs(firestore: Firestore, loan: Loan) {
+  return {
+    loanRef: doc(firestore, 'loans', loan.id),
+    activeRef: doc(firestore, 'studentLoanActiveKeys', activeKeyId(loan.uid, loan.bookId)),
+    lockRef: doc(firestore, 'bookLoanLocks', loan.bookId),
+    auditRef: doc(collection(firestore, 'loanAuditLogs')),
+  }
+}
+
+function logAdminLoanFailure(
+  action: 'approve' | 'reject' | 'pickup' | 'renew' | 'return',
+  loan: Loan,
+  error: unknown,
+) {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : 'unknown'
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`[Firestore] ${action}-loan failed`, {
+    action,
+    code,
+    message,
+    paths: {
+      loan: `loans/${loan.id}`,
+      activeKey: `studentLoanActiveKeys/${activeKeyId(loan.uid, loan.bookId)}`,
+      lock: `bookLoanLocks/${loan.bookId}`,
+      auditCollection: 'loanAuditLogs',
+    },
+  })
+}
+
+export async function loadAdminLoans() {
+  const { firestore } = getAdminFirebaseContext()
+  const snapshot = await getDocs(query(
+    collection(firestore, 'loans'),
+    orderBy('requestedAt', 'desc'),
+    limit(ADMIN_LOAN_LIMIT),
+  ))
+  return snapshot.docs.map(normalizeLoanSnapshot)
+}
+
+export async function approveLoanAsAdmin(loan: Loan, loanDays: number, note = '') {
+  const { user, firestore } = await getVerifiedAdminFirebaseContext()
+  const refs = adminRefs(firestore, loan)
+  const days = normalizeLoanDays(loanDays)
+  try {
+    return await runTransaction(firestore, async (transaction) => {
+      const [loanSnapshot, activeSnapshot, lockSnapshot] = await Promise.all([
+        transaction.get(refs.loanRef),
+        transaction.get(refs.activeRef),
+        transaction.get(refs.lockRef),
+      ])
+      if (!loanSnapshot.exists()) throw new Error('ไม่พบคำขอยืม')
+      const current = normalizeLoanSnapshot(loanSnapshot)
+      if (current.status === 'approved' && lockSnapshot.data()?.loanId === loan.id) return false
+      planLoanTransition(current.status, 'approved')
+      if (!activeSnapshot.exists() || activeSnapshot.data().loanId !== loan.id) throw new Error('Active loan key ไม่ตรงกับคำขอ')
+      if (lockSnapshot.exists()) throw new Error('หนังสือเล่มนี้ถูกอนุมัติให้คำขออื่นแล้ว')
+      const timestamp = serverTimestamp()
+      transaction.update(refs.loanRef, {
+        status: 'approved',
+        approvedAt: timestamp,
+        approvedBy: user.uid,
+        loanDays: days,
+        adminNote: note.trim(),
+        updatedAt: timestamp,
+        lastAuditId: refs.auditRef.id,
+      })
+      transaction.update(refs.activeRef, {
+        status: 'approved',
+        updatedAt: timestamp,
+        lastAuditId: refs.auditRef.id,
+      })
+      transaction.set(refs.lockRef, {
+        bookId: loan.bookId,
+        loanId: loan.id,
+        status: 'approved',
+        updatedAt: timestamp,
+        lastAuditId: refs.auditRef.id,
+      })
+      transaction.set(refs.auditRef, auditPayload(
+        'approve', loan.id, loan.bookId, loan.uid, 'pending', 'approved',
+        user.uid, user.email?.toLocaleLowerCase('en-US') ?? null, note,
+      ))
+      return true
+    })
+  } catch (error) {
+    logAdminLoanFailure('approve', loan, error)
+    throw error
+  }
+}
+
+export async function rejectLoanAsAdmin(loan: Loan, note: string) {
+  const { user, firestore } = await getVerifiedAdminFirebaseContext()
+  const refs = adminRefs(firestore, loan)
+  return runTransaction(firestore, async (transaction) => {
+    const [loanSnapshot, activeSnapshot, lockSnapshot] = await Promise.all([
+      transaction.get(refs.loanRef),
+      transaction.get(refs.activeRef),
+      transaction.get(refs.lockRef),
+    ])
+    if (!loanSnapshot.exists()) throw new Error('ไม่พบคำขอยืม')
+    const current = normalizeLoanSnapshot(loanSnapshot)
+    if (current.status === 'rejected') return false
+    planLoanTransition(current.status, 'rejected')
+    if (!activeSnapshot.exists() || activeSnapshot.data().loanId !== loan.id) throw new Error('Active loan key ไม่ตรงกับคำขอ')
+    if (current.status === 'approved' && (!lockSnapshot.exists() || lockSnapshot.data().loanId !== loan.id)) {
+      throw new Error('Loan lock ไม่ตรงกับคำขอที่อนุมัติ')
+    }
+    const timestamp = serverTimestamp()
+    transaction.update(refs.loanRef, {
+      status: 'rejected',
+      rejectedAt: timestamp,
+      adminNote: note.trim(),
+      updatedAt: timestamp,
+      lastAuditId: refs.auditRef.id,
+    })
+    transaction.delete(refs.activeRef)
+    if (current.status === 'approved') transaction.delete(refs.lockRef)
+    transaction.set(refs.auditRef, auditPayload(
+      'reject', loan.id, loan.bookId, loan.uid, current.status, 'rejected',
+      user.uid, user.email?.toLocaleLowerCase('en-US') ?? null, note,
+    ))
+    return true
+  })
+}
+
+export async function pickupLoanAsAdmin(loan: Loan, loanDays: number) {
+  const { user, firestore } = await getVerifiedAdminFirebaseContext()
+  const refs = adminRefs(firestore, loan)
+  const days = normalizeLoanDays(loanDays)
+  return runTransaction(firestore, async (transaction) => {
+    const [loanSnapshot, activeSnapshot, lockSnapshot] = await Promise.all([
+      transaction.get(refs.loanRef),
+      transaction.get(refs.activeRef),
+      transaction.get(refs.lockRef),
+    ])
+    if (!loanSnapshot.exists()) throw new Error('ไม่พบคำขอยืม')
+    const current = normalizeLoanSnapshot(loanSnapshot)
+    if (current.status === 'borrowed' && lockSnapshot.data()?.loanId === loan.id) return false
+    planLoanTransition(current.status, 'borrowed')
+    if (!activeSnapshot.exists() || activeSnapshot.data().loanId !== loan.id) throw new Error('Active loan key ไม่ตรงกับคำขอ')
+    if (!lockSnapshot.exists() || lockSnapshot.data().loanId !== loan.id || lockSnapshot.data().status !== 'approved') {
+      throw new Error('Loan lock ไม่พร้อมยืนยันการรับหนังสือ')
+    }
+    const borrowedAt = Timestamp.now()
+    const dueAt = Timestamp.fromDate(calculateDueAt(borrowedAt.toDate(), days))
+    const timestamp = serverTimestamp()
+    transaction.update(refs.loanRef, {
+      status: 'borrowed',
+      borrowedAt: timestamp,
+      dueAt,
+      loanDays: days,
+      updatedAt: timestamp,
+      lastAuditId: refs.auditRef.id,
+    })
+    transaction.update(refs.activeRef, {
+      status: 'borrowed',
+      updatedAt: timestamp,
+      lastAuditId: refs.auditRef.id,
+    })
+    transaction.update(refs.lockRef, {
+      status: 'borrowed',
+      updatedAt: timestamp,
+      lastAuditId: refs.auditRef.id,
+    })
+    transaction.set(refs.auditRef, auditPayload(
+      'pickup', loan.id, loan.bookId, loan.uid, 'approved', 'borrowed',
+      user.uid, user.email?.toLocaleLowerCase('en-US') ?? null, '',
+    ))
+    return true
+  })
+}
+
+export async function renewLoanAsAdmin(loan: Loan) {
+  const { user, firestore } = await getVerifiedAdminFirebaseContext()
+  const refs = adminRefs(firestore, loan)
+  return runTransaction(firestore, async (transaction) => {
+    const [loanSnapshot, lockSnapshot] = await Promise.all([
+      transaction.get(refs.loanRef),
+      transaction.get(refs.lockRef),
+    ])
+    if (!loanSnapshot.exists()) throw new Error('ไม่พบคำขอยืม')
+    const current = normalizeLoanSnapshot(loanSnapshot)
+    if (current.status !== 'borrowed' || !current.dueAt) throw new Error('ขยายเวลาได้เฉพาะหนังสือที่กำลังยืม')
+    if (current.renewCount >= MAX_RENEW_COUNT) throw new Error('รายการนี้ใช้สิทธิ์ขยายเวลาแล้ว')
+    if (!lockSnapshot.exists() || lockSnapshot.data().loanId !== loan.id || lockSnapshot.data().status !== 'borrowed') {
+      throw new Error('Loan lock ไม่ตรงกับรายการยืม')
+    }
+    const timestamp = serverTimestamp()
+    transaction.update(refs.loanRef, {
+      dueAt: Timestamp.fromDate(calculateDueAt(current.dueAt, current.loanDays)),
+      renewCount: current.renewCount + 1,
+      updatedAt: timestamp,
+      lastAuditId: refs.auditRef.id,
+    })
+    transaction.update(refs.lockRef, {
+      updatedAt: timestamp,
+      lastAuditId: refs.auditRef.id,
+    })
+    transaction.set(refs.auditRef, auditPayload(
+      'renew', loan.id, loan.bookId, loan.uid, 'borrowed', 'borrowed',
+      user.uid, user.email?.toLocaleLowerCase('en-US') ?? null, `ขยาย ${current.loanDays} วัน`,
+    ))
+    return true
+  })
+}
+
+export async function returnLoanAsAdmin(loan: Loan) {
+  const { user, firestore } = await getVerifiedAdminFirebaseContext()
+  const refs = adminRefs(firestore, loan)
+  return runTransaction(firestore, async (transaction) => {
+    const [loanSnapshot, activeSnapshot, lockSnapshot] = await Promise.all([
+      transaction.get(refs.loanRef),
+      transaction.get(refs.activeRef),
+      transaction.get(refs.lockRef),
+    ])
+    if (!loanSnapshot.exists()) throw new Error('ไม่พบคำขอยืม')
+    const current = normalizeLoanSnapshot(loanSnapshot)
+    if (current.status === 'returned') return false
+    planLoanTransition(current.status, 'returned')
+    if (!activeSnapshot.exists() || activeSnapshot.data().loanId !== loan.id) throw new Error('Active loan key ไม่ตรงกับคำขอ')
+    if (!lockSnapshot.exists() || lockSnapshot.data().loanId !== loan.id || lockSnapshot.data().status !== 'borrowed') {
+      throw new Error('Loan lock ไม่ตรงกับรายการยืม')
+    }
+    const timestamp = serverTimestamp()
+    transaction.update(refs.loanRef, {
+      status: 'returned',
+      returnedAt: timestamp,
+      returnedBy: user.uid,
+      updatedAt: timestamp,
+      lastAuditId: refs.auditRef.id,
+    })
+    transaction.delete(refs.activeRef)
+    transaction.delete(refs.lockRef)
+    transaction.set(refs.auditRef, auditPayload(
+      'return', loan.id, loan.bookId, loan.uid, 'borrowed', 'returned',
+      user.uid, user.email?.toLocaleLowerCase('en-US') ?? null, '',
+    ))
+    return true
+  })
+}
