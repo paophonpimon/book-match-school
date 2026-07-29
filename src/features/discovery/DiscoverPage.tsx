@@ -63,7 +63,7 @@ export function DiscoverPage() {
         <section className="swipe-stage" aria-live="polite">
           {nextBook && (
             <article key={nextBook.id} className="swipe-card swipe-card--next" aria-hidden="true">
-              <BookCover book={nextBook} />
+              <BookCover book={nextBook} loading="eager" />
               <div className="swipe-card__info">
                 <div className="badge-row">
                   <span>{categories.find((item) => item.id === nextBook.categoryId)?.name ?? nextBook.categoryId}</span>
@@ -134,7 +134,7 @@ function SwipeCard({ book, category, availability, x, y, onDecision }: { book: R
         <X />
       </motion.span>
       <motion.span className="swipe-stamp swipe-stamp--save" style={{ opacity: saveOpacity }}>เก็บไว้</motion.span>
-      <BookCover book={book} />
+      <BookCover book={book} loading="eager" />
       <div className="swipe-card__info"><div className="badge-row"><span>{category}</span>{book.featured && <span>แนะนำ</span>}<span className={`loan-badge loan-badge--${availability.tone}`}>{availability.label}</span></div><h2>{book.title}</h2><p>{book.author}</p><small>{book.description}</small></div>
     </motion.article>
   )

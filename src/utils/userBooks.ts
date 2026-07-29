@@ -16,9 +16,7 @@ export function coverFallbackNeeded(url: string) {
   if (!url.trim()) return true
   try {
     const parsed = new URL(url)
-    if (!['http:', 'https:'].includes(parsed.protocol)) return true
-    const hostname = parsed.hostname.replace(/^www\./, '').toLowerCase()
-    return ['2ebook.com', 'elibrarycub.com'].includes(hostname)
+    return !['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname
   } catch {
     return true
   }

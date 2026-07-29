@@ -43,7 +43,7 @@ export function ReviewPage() {
     <div className="page review-page">
       <PageHeader title="รีวิวเพื่อยืนยัน" back />
       <ProgressSteps active={5} />
-      <section className="review-book"><BookCover book={book} /><div><p className="eyebrow">อ่านจบแล้ว!</p><h1>{book.title}</h1><p>{book.author}</p></div></section>
+      <section className="review-book"><BookCover book={book} loading="eager" /><div><p className="eyebrow">อ่านจบแล้ว!</p><h1>{book.title}</h1><p>{book.author}</p></div></section>
       <form onSubmit={submit} className="review-form">
         <fieldset><legend>ให้ดาวหนังสือเล่มนี้</legend><div className="stars">{[1, 2, 3, 4, 5].map((value) => <button type="button" key={value} className={rating >= value ? 'active' : ''} onClick={() => setRating(value)} aria-label={`${value} ดาว`}><Star fill={rating >= value ? 'currentColor' : 'none'} /></button>)}</div></fieldset>
         <fieldset><legend>ความรู้สึกหลังอ่าน</legend><div className="feeling-grid">{feelings.map(([id, icon, label]) => <button type="button" key={id} className={moodAfterReading === id ? 'active' : ''} onClick={() => setMood(id)}><span>{icon}</span><small>{label}</small></button>)}</div></fieldset>

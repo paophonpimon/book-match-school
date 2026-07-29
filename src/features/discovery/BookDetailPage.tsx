@@ -54,7 +54,7 @@ export function BookDetailPage() {
       <PageHeader title={isMatch ? 'เจอเล่มที่ใช่!' : 'รายละเอียดหนังสือ'} back />
       {isMatch && <div className="match-confetti" aria-hidden="true">✦ <Sparkles /> ❋</div>}
       <section className="detail-hero">
-        <BookCover book={book} />
+        <BookCover book={book} loading="eager" />
         <div className="detail-summary"><div className="badge-row"><span>{category}</span>{book.featured && <span>เล่มแนะนำ</span>}</div><h1>{book.title}</h1><p>{book.author}</p><div className="detail-rating">★ 4.8 <span>· จากนักอ่าน 24 คน</span></div></div>
       </section>
       <section className="shelf-location"><MapPin /><div><small>พบหนังสือได้ที่</small><strong>{book.shelfCode}</strong><p>{book.shelfDescription}</p></div></section>

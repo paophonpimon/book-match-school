@@ -59,7 +59,7 @@ describe('Google Sheets catalog', () => {
     expect(splitSemicolonList(['หนึ่ง; สอง', 'สาม'])).toEqual(['หนึ่ง', 'สอง', 'สาม'])
   })
 
-  it('keeps only books with usable covers in the Firestore student catalog', () => {
+  it('keeps valid remote cover URLs regardless of host and removes only missing covers', () => {
     const catalog = normalizeBooksApiResponse({
       ok: true,
       books: [
@@ -69,8 +69,8 @@ describe('Google Sheets catalog', () => {
       ],
     })
     const filtered = filterCatalogToBooksWithCovers(catalog)
-    expect(filtered.books.map((book) => book.id)).toEqual(['good'])
-    expect(filtered.categories.map((category) => category.id)).toEqual(['000'])
+    expect(filtered.books.map((book) => book.id)).toEqual(['good', 'dead'])
+    expect(filtered.categories.map((category) => category.id)).toEqual(['000', '100'])
   })
 
   it('does not silently use demo books when the API is unavailable', async () => {

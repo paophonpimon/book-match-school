@@ -19,9 +19,9 @@ describe('user book rules', () => {
     expect(coverFallbackNeeded('not-a-url')).toBe(true)
     expect(coverFallbackNeeded('https://example.com/cover.jpg')).toBe(false)
   })
-  it('immediately falls back for catalog cover hosts that are no longer reachable', () => {
-    expect(coverFallbackNeeded('https://www.2ebook.com/new/assets/images/thumb/book.jpg')).toBe(true)
-    expect(coverFallbackNeeded('https://www.elibrarycub.com/images/book.jpg')).toBe(true)
+  it('lets the image request decide whether a valid remote cover can load', () => {
+    expect(coverFallbackNeeded('https://www.2ebook.com/new/assets/images/thumb/book.jpg')).toBe(false)
+    expect(coverFallbackNeeded('https://www.elibrarycub.com/images/book.jpg')).toBe(false)
     expect(coverFallbackNeeded('https://storage.naiin.com/cover.jpg')).toBe(false)
   })
 })
