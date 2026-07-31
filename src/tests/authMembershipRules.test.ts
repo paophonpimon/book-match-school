@@ -43,6 +43,11 @@ describe('Google student authentication and membership security', () => {
     expect(rules).toContain('allow list: if isAdmin()')
   })
 
+  it('turns a protected duplicate lookup into a useful Thai registration error', () => {
+    expect(firebaseService).toContain('register-student-membership failed')
+    expect(firebaseService).toContain('อาจมีบัญชีสมาชิกลงทะเบียนเลขนี้ไว้แล้ว')
+  })
+
   it('restricts suspended members from new student activity', () => {
     expect(rules).toContain("get(membershipPath).data.status == 'active'")
     expect(rules).toContain('activeMember(request.resource.data.uid)')

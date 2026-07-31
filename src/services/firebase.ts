@@ -227,7 +227,8 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
   const progressRef = doc(firestore, 'progress', `${termId}_${profile.uid}`)
   const membershipRef = doc(firestore, 'studentMemberships', studentId)
   const membershipUidRef = doc(firestore, 'studentMembershipUids', profile.uid)
-  await runTransaction(firestore, async (transaction) => {
+  try {
+    await runTransaction(firestore, async (transaction) => {
     const [profileSnapshot, progressSnapshot, membershipSnapshot, membershipUidSnapshot] = await Promise.all([
       transaction.get(profileRef),
       transaction.get(progressRef),
@@ -290,7 +291,23 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
       lastReadAt: progress?.lastReadAt ?? null,
       updatedAt: timestamp,
     })
-  })
+    })
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+    console.error('[Firestore] register-student-membership failed', {
+      code,
+      paths: [
+        `profiles/${profile.uid}`,
+        `studentMemberships/${studentId}`,
+        `studentMembershipUids/${profile.uid}`,
+        `progress/${termId}_${profile.uid}`,
+      ],
+    })
+    if (code.includes('permission-denied')) {
+      throw new Error('ไม่สามารถใช้เลขประจำตัวนักเรียนนี้ได้ อาจมีบัญชีสมาชิกลงทะเบียนเลขนี้ไว้แล้ว กรุณาตรวจเลขอีกครั้งหรือติดต่อผู้ดูแล')
+    }
+    throw error
+  }
 }
 
 export async function loadRemoteStudentState(user: User, termId: string): Promise<{
