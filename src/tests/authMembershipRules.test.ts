@@ -18,6 +18,12 @@ describe('Google student authentication and membership security', () => {
     expect(firebaseService).toContain('onAuthStateChanged')
   })
 
+  it('upgrades a legacy anonymous account by linking Google without changing its UID', () => {
+    expect(firebaseService).toContain('auth.currentUser?.isAnonymous')
+    expect(firebaseService).toContain('linkWithPopup(auth.currentUser, provider)')
+    expect(firebaseService).toContain('linkWithRedirect(auth.currentUser, provider)')
+  })
+
   it('requires verified token email for membership ownership', () => {
     expect(rules).toContain('request.auth.token.email_verified == true')
     expect(rules).toContain('request.resource.data.email == request.auth.token.email')

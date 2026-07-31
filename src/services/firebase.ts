@@ -4,6 +4,8 @@ import {
   browserLocalPersistence,
   getAuth,
   getRedirectResult,
+  linkWithPopup,
+  linkWithRedirect,
   onAuthStateChanged,
   setPersistence,
   signInWithPopup,
@@ -102,14 +104,21 @@ export async function signInStudentWithGoogle() {
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
   try {
+    if (auth.currentUser?.isAnonymous) {
+      return (await linkWithPopup(auth.currentUser, provider)).user
+    }
     return (await signInWithPopup(auth, provider)).user
   } catch (error) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+    if (code.includes('credential-already-in-use') || code.includes('email-already-in-use')) {
+      throw new Error('บัญชี Google นี้มีสมาชิกอยู่แล้ว กรุณาออกจากบัญชีชั่วคราวและเข้าสู่ระบบด้วยบัญชี Google เดิม')
+    }
     if (code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) {
       throw new Error('ยกเลิกการเข้าสู่ระบบด้วย Google แล้ว')
     }
     if (code.includes('popup-blocked') || code.includes('operation-not-supported-in-this-environment')) {
-      await signInWithRedirect(auth, provider)
+      if (auth.currentUser?.isAnonymous) await linkWithRedirect(auth.currentUser, provider)
+      else await signInWithRedirect(auth, provider)
       return null
     }
     throw error

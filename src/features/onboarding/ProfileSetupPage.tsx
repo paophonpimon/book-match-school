@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, BadgeCheck } from 'lucide-react'
+import { ArrowRight, BadgeCheck, Link2, LoaderCircle } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
 import { classNameFromGradeLevel, gradeLevelFromClassName, hasPermanentStudentId, validateStudentProfile } from '../../utils/profile'
 
 export function ProfileSetupPage() {
-  const { authUser, currentTerm, profile, saveProfile } = useApp()
+  const { authUser, currentTerm, profile, saveProfile, signInWithGoogle, syncing } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const redirectedError = typeof location.state === 'object'
@@ -24,6 +24,7 @@ export function ProfileSetupPage() {
   const [error, setError] = useState(redirectedError)
   const [saving, setSaving] = useState(false)
   const studentIdLocked = hasPermanentStudentId(profile?.studentId)
+  const needsGoogleLink = authUser?.isAnonymous === true || !authUser?.email
 
   if (!authUser || !currentTerm) return <Navigate to="/welcome" replace />
 
@@ -64,6 +65,15 @@ export function ProfileSetupPage() {
         <p className="eyebrow">โปรไฟล์นักอ่าน</p>
         <h1>ให้เราเรียกคุณว่าอะไรดี?</h1>
         <p>ข้อมูลนี้ใช้สร้างสมาชิกถาวรและบันทึกอันดับการอ่านของคุณ</p>
+        {needsGoogleLink && (
+          <div className="profile-google-link" role="status">
+            <strong>เชื่อมบัญชี Google ก่อนบันทึก</strong>
+            <p>ระบบพบบัญชีชั่วคราวจากเวอร์ชันเดิม เชื่อม Google เพื่อรักษาโปรไฟล์และประวัติเดิมไว้กับ UID นี้</p>
+            <button className="button button--secondary button--wide" type="button" onClick={() => void signInWithGoogle()} disabled={syncing}>
+              {syncing ? <><LoaderCircle className="spin" /> กำลังเชื่อมบัญชี…</> : <><Link2 /> เชื่อมบัญชี Google</>}
+            </button>
+          </div>
+        )}
         <form onSubmit={submit} noValidate>
           <label>เลขประจำตัวนักเรียน<input required autoFocus={!studentIdLocked} disabled={studentIdLocked} inputMode="numeric" autoComplete="off" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="ระบุเลขประจำตัวนักเรียน" maxLength={20} /></label>
           <div className="form-row">
@@ -76,11 +86,13 @@ export function ProfileSetupPage() {
           </div>
           <label>ชื่อเล่น/ชื่อที่จะแสดง<input required autoComplete="nickname" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="เช่น มินยอดนักอ่าน" maxLength={40} /></label>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="button button--primary button--wide" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'ไปเลือกอารมณ์'} <ArrowRight /></button>
+          <button className="button button--primary button--wide" disabled={saving || syncing || needsGoogleLink}>{saving ? 'กำลังบันทึก…' : needsGoogleLink ? 'เชื่อมบัญชี Google ก่อน' : 'ไปเลือกอารมณ์'} <ArrowRight /></button>
         </form>
         <small>{studentIdLocked
           ? `บัญชีสมาชิกผูกกับ ${authUser.email} และไม่สามารถเปลี่ยนเลขประจำตัวนักเรียนภายหลังได้`
-          : `กรอกเลขประจำตัวนักเรียนเพื่อผูกบัญชีเดิมกับ ${authUser.email} อย่างถาวร`}</small>
+          : authUser.email
+            ? `กรอกเลขประจำตัวนักเรียนเพื่อผูกบัญชีเดิมกับ ${authUser.email} อย่างถาวร`
+            : 'กรอกเลขประจำตัวได้ทันที และเชื่อม Google ก่อนกดบันทึก'}</small>
       </section>
     </main>
   )

@@ -295,6 +295,9 @@ textarea { resize: vertical; line-height: 1.6; }
 .term-report-ranking th:not(:nth-child(2)):not(:nth-child(3)),
 .term-report-ranking td:not(:nth-child(2)):not(:nth-child(3)) { text-align: center; }
 .term-report-generated { display: block; margin-top: 14px; color: var(--muted); }
+.profile-google-link { margin: 18px 0; padding: 16px; border: 1px solid #efc089; border-radius: 16px; background: #fff5e7; }
+.profile-google-link strong { display: block; color: #8d4d00; }
+.profile-google-link p { margin: 5px 0 12px; font-size: .9rem; }
 .status-pill--suspended, .status-pill--closed { background: #fbe8e5; color: #a43126; }
 .status-pill--graduated, .status-pill--active { background: #e3f2e6; color: #24623a; }
 .status-pill--transferred, .status-pill--draft { background: #eee9f7; color: #594382; }
