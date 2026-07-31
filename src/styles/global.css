@@ -269,6 +269,32 @@ textarea { resize: vertical; line-height: 1.6; }
 .admin-term-form { margin: 18px 0 24px; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: #fffaf5; }
 .admin-term-form h3 { margin-top: 0; }
 .admin-term-list > article { grid-template-columns: 1fr auto; }
+.admin-term-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.button--danger { color: #a43126; border-color: #efb8b0; }
+.button--danger:hover { background: #fff0ed; }
+.term-report-print { margin-top: 24px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: #fffdf9; }
+.term-report-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.term-report-header h2 { display: flex; align-items: center; gap: 8px; margin: 3px 0 6px; }
+.term-report-header p { margin: 0; }
+.term-report-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.term-report-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 22px 0; }
+.term-report-stats article { padding: 14px; border-radius: 15px; background: #f9eee5; }
+.term-report-stats small { display: block; min-height: 2.2em; color: var(--muted); }
+.term-report-stats strong { display: block; margin-top: 5px; font-size: 1.45rem; }
+.term-report-breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.term-report-breakdown > section, .term-report-ranking { padding: 18px; border: 1px solid var(--line); border-radius: 16px; }
+.term-report-breakdown h3, .term-report-ranking h3 { margin: 0 0 12px; }
+.term-report-breakdown dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.term-report-breakdown dl div { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; border-radius: 11px; background: #fbf6f0; }
+.term-report-breakdown dt { color: var(--muted); }
+.term-report-breakdown dd { margin: 0; font-weight: 700; }
+.term-report-ranking { margin-top: 14px; }
+.term-report-table-wrap { overflow-x: auto; }
+.term-report-ranking table { width: 100%; border-collapse: collapse; min-width: 660px; }
+.term-report-ranking th, .term-report-ranking td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.term-report-ranking th:not(:nth-child(2)):not(:nth-child(3)),
+.term-report-ranking td:not(:nth-child(2)):not(:nth-child(3)) { text-align: center; }
+.term-report-generated { display: block; margin-top: 14px; color: var(--muted); }
 .status-pill--suspended, .status-pill--closed { background: #fbe8e5; color: #a43126; }
 .status-pill--graduated, .status-pill--active { background: #e3f2e6; color: #24623a; }
 .status-pill--transferred, .status-pill--draft { background: #eee9f7; color: #594382; }
@@ -278,10 +304,29 @@ textarea { resize: vertical; line-height: 1.6; }
   .admin-mobile-nav button { min-width: 88px; flex: 0 0 auto; }
   .admin-member-list > article { grid-template-columns: 1fr; }
   .admin-member-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .term-report-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 520px) {
   .reader-level-card, .term-rank-card { padding: 18px; border-radius: 20px; }
   .admin-member-list dl { grid-template-columns: 1fr; }
   .admin-term-list > article { grid-template-columns: 1fr; }
+  .admin-term-actions, .term-report-actions { justify-content: stretch; }
+  .admin-term-actions .button, .term-report-actions .button { flex: 1 1 150px; }
+  .term-report-print { padding: 17px; }
+  .term-report-header { display: grid; }
+  .term-report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .term-report-breakdown { grid-template-columns: 1fr; }
+  .term-report-breakdown dl { grid-template-columns: 1fr; }
+}
+
+@media print {
+  body * { visibility: hidden !important; }
+  .term-report-print, .term-report-print * { visibility: visible !important; }
+  .term-report-print { position: absolute; inset: 0; width: 100%; margin: 0; padding: 12mm; border: 0; background: #fff; }
+  .term-report-actions { display: none !important; }
+  .term-report-stats { grid-template-columns: repeat(3, 1fr); }
+  .term-report-breakdown { grid-template-columns: repeat(2, 1fr); }
+  .term-report-table-wrap { overflow: visible; }
+  .term-report-ranking table { min-width: 0; }
 }

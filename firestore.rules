@@ -220,8 +220,8 @@ service cloud.firestore {
     match /userBooks/{recordId} {
       // A transaction must be allowed to read its own not-yet-existing document.
       // The exact UID is embedded between termId and bookId in the canonical ID.
-      allow get: if userBookIdBelongsToSignedInUser(recordId);
-      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow get: if isAdmin() || userBookIdBelongsToSignedInUser(recordId);
+      allow list: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
       allow create: if validUserBook(recordId);
       allow update: if validUserBook(recordId)
         && validUserBookStatusTransition()
@@ -438,6 +438,18 @@ service cloud.firestore {
         && request.resource.data.updatedBy == request.auth.uid;
     }
 
+    function currentSettingPointsTo(termId) {
+      let settingPath = /databases/$(database)/documents/settings/currentTerm;
+      return existsAfter(settingPath)
+        && getAfter(settingPath).data.termId == termId;
+    }
+
+    function currentSettingStopsPointingTo(termId) {
+      let settingPath = /databases/$(database)/documents/settings/currentTerm;
+      return !existsAfter(settingPath)
+        || getAfter(settingPath).data.termId != termId;
+    }
+
     match /terms/{termId} {
       allow read: if signedIn();
       allow create: if isAdmin()
@@ -453,12 +465,22 @@ service cloud.firestore {
           'status', 'updatedAt', 'updatedBy'
         ])
         && ((resource.data.status == 'draft'
-            && request.resource.data.status in ['draft', 'active'])
+            && (request.resource.data.status == 'draft'
+              || (request.resource.data.status == 'active'
+                && currentSettingPointsTo(termId))))
           || (resource.data.status == 'active'
-            && request.resource.data.status in ['active', 'closed'])
+            && (request.resource.data.status == 'active'
+              || (request.resource.data.status == 'closed'
+                && currentSettingStopsPointingTo(termId))))
           || (resource.data.status == 'closed'
-            && request.resource.data.status == 'closed'));
-      allow delete: if false;
+            && (request.resource.data.status == 'closed'
+              || (request.resource.data.status == 'active'
+                && currentSettingPointsTo(termId)))));
+      // A draft cannot be referenced by student activity because all student
+      // writes require settings/currentTerm to point to an active term.
+      allow delete: if isAdmin()
+        && resource.data.status == 'draft'
+        && currentSettingStopsPointingTo(termId);
     }
 
     function validCurrentTermSetting() {
@@ -474,11 +496,19 @@ service cloud.firestore {
         && getAfter(termPath).data.status == 'active';
     }
 
+    function validCurrentTermDelete() {
+      let termId = resource.data.termId;
+      let termPath = /databases/$(database)/documents/terms/$(termId);
+      return existsAfter(termPath)
+        && getAfter(termPath).data.status == 'closed';
+    }
+
     match /settings/currentTerm {
       allow read: if signedIn();
       allow create, update: if isAdmin()
         && validCurrentTermSetting();
-      allow delete: if false;
+      allow delete: if isAdmin()
+        && validCurrentTermDelete();
     }
 
     match /settings/{settingId} {
