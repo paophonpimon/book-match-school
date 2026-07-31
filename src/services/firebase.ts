@@ -219,6 +219,7 @@ export async function loadCurrentTermRemote(): Promise<AcademicTerm | null> {
 export async function saveProfileRemote(profile: Profile, termId: string) {
   const firestore = requireFirestore()
   const user = verifiedStudentUser()
+  await user.getIdToken(true)
   if (user.uid !== profile.uid) throw new Error('UID ของโปรไฟล์ไม่ตรงกับบัญชี Google')
   const studentId = profile.studentId?.trim() ?? ''
   if (!studentId) throw new Error('กรุณาระบุเลขประจำตัวนักเรียน')

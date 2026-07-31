@@ -29,6 +29,14 @@ describe('Google student authentication and membership security', () => {
     expect(rules).toContain('request.resource.data.email == request.auth.token.email')
   })
 
+  it('permits a one-time legacy student ID upgrade but keeps an existing ID immutable', () => {
+    expect(rules).toContain("resource.data.get('studentId', '')")
+    expect(rules).toContain("previousStudentId == ''")
+    expect(rules).toContain('request.resource.data.studentId == previousStudentId')
+    expect(rules).toContain('profileMembershipMatches(uid)')
+    expect(firebaseService).toContain('await user.getIdToken(true)')
+  })
+
   it('restricts suspended members from new student activity', () => {
     expect(rules).toContain("get(membershipPath).data.status == 'active'")
     expect(rules).toContain('activeMember(request.resource.data.uid)')

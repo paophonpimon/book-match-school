@@ -92,6 +92,12 @@ service cloud.firestore {
         && getAfter(uidLockPath).data.studentId == request.resource.data.studentId;
     }
 
+    function studentIdIsImmutableOrLegacyUpgrade() {
+      let previousStudentId = resource.data.get('studentId', '');
+      return previousStudentId == ''
+        || request.resource.data.studentId == previousStudentId;
+    }
+
     match /profiles/{uid} {
       allow get: if owns(uid) || isAdmin();
       allow list: if isAdmin();
@@ -103,7 +109,9 @@ service cloud.firestore {
       allow update: if owns(uid)
         && validProfile(uid)
         && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.studentId == resource.data.studentId
+        // Legacy profiles created before permanent membership do not have a
+        // studentId. They may set it once, atomically with membership + UID lock.
+        && studentIdIsImmutableOrLegacyUpgrade()
         && request.resource.data.lastActiveAt == request.time
         && profileMembershipMatches(uid);
       allow delete: if false;
