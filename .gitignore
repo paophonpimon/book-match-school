@@ -5,10 +5,15 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.acceptance
 *.local
 
 .firebase/
 firebase-debug.log
+firestore-debug.log
+acceptance/artifacts/playwright-report/
+acceptance/artifacts/test-results/
+acceptance/artifacts/playwright-results.json
 vite-*.log
 
 .claude/

@@ -19,6 +19,8 @@ export const env = {
   booksApiUrl: import.meta.env.VITE_BOOKS_API_URL,
   catalogSource: import.meta.env.VITE_CATALOG_SOURCE === 'firestore' ? 'firestore' : 'apps-script',
   adminPin: import.meta.env.VITE_ADMIN_PIN || '2468',
+  useFirebaseEmulators: import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true',
+  acceptanceMode: import.meta.env.VITE_ACCEPTANCE_MODE === 'true',
 }
 
 export const missingFirebaseKeys = firebaseKeys.filter((key) => !import.meta.env[key])

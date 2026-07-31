@@ -2,6 +2,7 @@ import { getApps, initializeApp, type FirebaseApp } from 'firebase/app'
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
+  connectAuthEmulator,
   getAuth,
   onAuthStateChanged,
   setPersistence,
@@ -12,6 +13,7 @@ import {
 } from 'firebase/auth'
 import {
   collection,
+  connectFirestoreEmulator,
   doc,
   getDocs,
   getDocsFromCache,
@@ -43,6 +45,7 @@ const ADMIN_APP_NAME = 'book-match-admin'
 let adminApp: FirebaseApp | null = null
 let adminAuth: Auth | null = null
 let adminDb: Firestore | null = null
+let adminEmulatorsConnected = false
 
 if (firebaseConfigured) {
   adminApp = getApps().find((app) => app.name === ADMIN_APP_NAME)
@@ -55,6 +58,17 @@ if (firebaseConfigured) {
   } catch {
     adminDb = getFirestore(adminApp)
   }
+  if (env.useFirebaseEmulators && !adminEmulatorsConnected) {
+    connectAuthEmulator(adminAuth, 'http://127.0.0.1:9099', { disableWarnings: true })
+    connectFirestoreEmulator(adminDb, '127.0.0.1', 8080)
+    adminEmulatorsConnected = true
+  }
+}
+
+export function getAdminAuthForAcceptance() {
+  if (!env.acceptanceMode) throw new Error('Acceptance auth ใช้ได้เฉพาะ local acceptance mode')
+  if (!adminAuth) throw new Error('Firebase Admin Authentication ยังไม่พร้อมใช้งาน')
+  return adminAuth
 }
 
 export function isAllowedAdmin(user: User | null) {

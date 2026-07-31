@@ -2,6 +2,7 @@ import { getApps, initializeApp, type FirebaseApp } from 'firebase/app'
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
+  connectAuthEmulator,
   getAuth,
   getRedirectResult,
   linkWithPopup,
@@ -16,6 +17,7 @@ import {
 } from 'firebase/auth'
 import {
   collection,
+  connectFirestoreEmulator,
   doc,
   getDoc,
   getDocs,
@@ -50,6 +52,7 @@ let firebaseApp: FirebaseApp | null = null
 let authInstance: Auth | null = null
 let firestoreInstance: Firestore | null = null
 let initializationError: Error | null = null
+let emulatorsConnected = false
 
 if (firebaseConfigured) {
   try {
@@ -61,6 +64,11 @@ if (firebaseConfigured) {
       })
     } catch {
       firestoreInstance = getFirestore(firebaseApp)
+    }
+    if (env.useFirebaseEmulators && !emulatorsConnected) {
+      connectAuthEmulator(authInstance, 'http://127.0.0.1:9099', { disableWarnings: true })
+      connectFirestoreEmulator(firestoreInstance, '127.0.0.1', 8080)
+      emulatorsConnected = true
     }
   } catch (error) {
     initializationError = error instanceof Error ? error : new Error('Firebase initialization failed')

@@ -1,0 +1,52 @@
+{
+  "projectId": "demo-book-match-acceptance",
+  "termId": "2999-1",
+  "generatedAt": "2026-07-31T20:38:23.443Z",
+  "users": {
+    "admin": {
+      "uid": "2XEyZOcrLTSSKL2O7qqz3ylxe43V",
+      "email": "paopornpimon@gmail.com",
+      "studentId": ""
+    },
+    "studentA": {
+      "uid": "ozVQe8wMB1npCnbqvhqcE8iNIYXw",
+      "email": "student-a@test.book-match.invalid",
+      "studentId": "99001"
+    },
+    "studentB": {
+      "uid": "oXTIFV82QqC7WyqyAiQAT4eQMapJ",
+      "email": "student-b@test.book-match.invalid",
+      "studentId": "99002"
+    },
+    "studentC": {
+      "uid": "nUS7a2WFo7jzGTHXBqAbeEr8XPNG",
+      "email": "student-c@test.book-match.invalid",
+      "studentId": "99003"
+    },
+    "suspended": {
+      "uid": "PsyZuoHwvkYVAPgI5czNq7igT9Sm",
+      "email": "student-suspended@test.book-match.invalid",
+      "studentId": "99004"
+    },
+    "studentNew": {
+      "uid": "mk2nKBykWZoSg28HNfs79HlZ2iIH",
+      "email": "student-new@test.book-match.invalid",
+      "studentId": "99005"
+    }
+  },
+  "books": [
+    "E2E-BOOK-01",
+    "E2E-BOOK-02",
+    "E2E-BOOK-03",
+    "E2E-BOOK-04",
+    "E2E-BOOK-05",
+    "E2E-BOOK-06",
+    "E2E-BOOK-07",
+    "E2E-BOOK-08",
+    "E2E-BOOK-09",
+    "E2E-BOOK-10",
+    "E2E-BOOK-11",
+    "E2E-BOOK-12"
+  ],
+  "scope": "Firebase Emulator only; every fixture ID contains E2E/TEST"
+}

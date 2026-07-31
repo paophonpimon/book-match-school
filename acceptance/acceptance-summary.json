@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-08-01T03:39:14+07:00",
+  "environment": "Firebase Auth and Firestore Emulator only",
+  "productionTouched": false,
+  "unit": { "files": 25, "total": 182, "passed": 182, "failed": 0, "skipped": 0 },
+  "acceptance": { "files": 2, "total": 17, "passed": 17, "failed": 0, "skipped": 0 },
+  "combined": { "files": 27, "total": 199, "passed": 199, "failed": 0, "skipped": 0 },
+  "quality": { "lint": "pass", "typecheck": "pass", "build": "pass" },
+  "requestLoan": "pass",
+  "concurrency": "pass",
+  "swipeResponsive": "pass",
+  "adminDataLayer": "pass",
+  "defects": { "blocker": 0, "critical": 0, "major": 0, "minor": 1 },
+  "deployment": "not-run"
+}
