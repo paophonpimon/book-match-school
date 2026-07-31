@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -354,7 +355,7 @@ function logAdminLoanFailure(
 
 export async function loadAdminLoans() {
   const { firestore } = getAdminFirebaseContext()
-  const snapshot = await getDocs(query(
+  const snapshot = await getDocsFromServer(query(
     collection(firestore, 'loans'),
     orderBy('requestedAt', 'desc'),
     limit(ADMIN_LOAN_LIMIT),

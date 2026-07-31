@@ -2,8 +2,8 @@ import {
   collection,
   doc,
   documentId,
-  getDoc,
-  getDocs,
+  getDocFromServer,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -44,7 +44,7 @@ async function docsByIds(collectionName: string, ids: string[]) {
   const { firestore } = getAdminFirebaseContext()
   const entries = await Promise.all(chunks([...new Set(ids.filter(Boolean))]).map(async (idsChunk) => {
     if (!idsChunk.length) return []
-    const snapshot = await getDocs(query(
+    const snapshot = await getDocsFromServer(query(
       collection(firestore, collectionName),
       where(documentId(), 'in', idsChunk),
     ))
@@ -69,20 +69,20 @@ function membershipFrom(snapshot: QueryDocumentSnapshot<DocumentData>): StudentM
 
 export async function loadAdminStudentMembers(maxResults = 100): Promise<AdminStudentMember[]> {
   const { firestore } = getAdminFirebaseContext()
-  const membershipSnapshot = await getDocs(query(
+  const membershipSnapshot = await getDocsFromServer(query(
     collection(firestore, 'studentMemberships'),
     orderBy('createdAt', 'desc'),
     limit(maxResults),
   ))
   const memberships = membershipSnapshot.docs.map(membershipFrom)
-  const currentTermSnapshot = await getDoc(doc(firestore, 'settings', 'currentTerm'))
+  const currentTermSnapshot = await getDocFromServer(doc(firestore, 'settings', 'currentTerm'))
   const termId = String(currentTermSnapshot.data()?.termId ?? '')
   const uids = memberships.map((item) => item.uid)
   const [profiles, stats, progress, activeLoansSnapshot] = await Promise.all([
     docsByIds('profiles', uids),
     docsByIds('readerStats', uids),
     docsByIds('progress', termId ? uids.map((uid) => `${termId}_${uid}`) : []),
-    getDocs(query(collection(firestore, 'loans'), where('status', 'in', ['pending', 'approved', 'borrowed']))),
+    getDocsFromServer(query(collection(firestore, 'loans'), where('status', 'in', ['pending', 'approved', 'borrowed']))),
   ])
   const activeLoanCounts = new Map<string, number>()
   activeLoansSnapshot.forEach((item) => {

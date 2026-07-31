@@ -1,7 +1,7 @@
 import {
   collection,
   doc,
-  getDocs,
+  getDocsFromServer,
   orderBy,
   query,
   runTransaction,
@@ -31,7 +31,7 @@ function asIso(value: unknown) {
 
 export async function listTermsAsAdmin(): Promise<AcademicTerm[]> {
   const { firestore } = getAdminFirebaseContext()
-  const snapshot = await getDocs(query(collection(firestore, 'terms'), orderBy('academicYear', 'desc')))
+  const snapshot = await getDocsFromServer(query(collection(firestore, 'terms'), orderBy('academicYear', 'desc')))
   return snapshot.docs.map((item) => {
     const data = item.data()
     return {
@@ -89,7 +89,7 @@ export async function createTermAsAdmin(term: NewAcademicTerm) {
 
 export async function activateTermAsAdmin(termId: string) {
   const { user, firestore } = await getVerifiedAdminFirebaseContext()
-  const activeSnapshot = await getDocs(query(collection(firestore, 'terms'), where('status', '==', 'active')))
+  const activeSnapshot = await getDocsFromServer(query(collection(firestore, 'terms'), where('status', '==', 'active')))
   const selectedRef = doc(firestore, 'terms', termId)
   const settingsRef = doc(firestore, 'settings', 'currentTerm')
   const activeRefs = activeSnapshot.docs.filter((item) => item.id !== termId).map((item) => item.ref)
@@ -175,9 +175,9 @@ function isLoanStatus(value: unknown): value is LoanStatus {
 export async function loadTermReportAsAdmin(term: AcademicTerm): Promise<TermReport> {
   const { firestore } = await getVerifiedAdminFirebaseContext()
   const [progressSnapshot, userBooksSnapshot, loansSnapshot] = await Promise.all([
-    getDocs(query(collection(firestore, 'progress'), where('termId', '==', term.id))),
-    getDocs(query(collection(firestore, 'userBooks'), where('termId', '==', term.id))),
-    getDocs(query(collection(firestore, 'loans'), where('termId', '==', term.id))),
+    getDocsFromServer(query(collection(firestore, 'progress'), where('termId', '==', term.id))),
+    getDocsFromServer(query(collection(firestore, 'userBooks'), where('termId', '==', term.id))),
+    getDocsFromServer(query(collection(firestore, 'loans'), where('termId', '==', term.id))),
   ])
   const readers: Reader[] = progressSnapshot.docs.map((item) => {
     const data = item.data()

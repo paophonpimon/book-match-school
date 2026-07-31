@@ -4,15 +4,25 @@ Generated: 1 August 2026 (Asia/Bangkok)
 
 ## Result
 
-- Combined automated checks: **199 passed, 0 failed, 0 skipped**
-- Vitest regression: **25 files / 182 tests passed**
+- Combined automated checks: **200 passed, 0 failed, 0 skipped**
+- Vitest regression: **25 files / 183 tests passed**
 - Playwright + Firebase Emulator: **2 files / 17 tests passed**
 - Firestore Rules acceptance: included in Playwright, **5 rule groups passed**
 - Lint: passed
 - Typecheck: passed
 - Production build: passed
 - Production bundle acceptance markers: **0**
-- Deployment: **not run**
+- Deployment: **Firestore Rules and Firebase Hosting released successfully**
+- Production URL: **https://book-match-school.web.app**
+
+## Production release verification
+
+- Production test/student data was reset to zero: profiles, memberships, progress, reader stats, shelves, reviews, loans, active loan keys, book locks and loan audit logs are empty.
+- Authentication retains only the authorized Admin account; 33 explicit legacy Anonymous/BOT/TEST accounts were removed.
+- All 27 `bookStats` documents were reconciled to zero counters after user data cleanup.
+- The catalog remains unchanged at 107 documents (106 active and 1 hidden); Apps Script, Functions and indexes were not modified or deployed.
+- A stale Admin IndexedDB-cache defect found during the Production smoke test was fixed. Admin membership/loan/term reads are server-authoritative and the Admin Firestore instance uses memory cache.
+- Cold-load verification passed on desktop and 390x844: members and every loan status show zero, the page has no horizontal overflow, and the deployed bundle is `index-Ut03EehV.js`.
 
 ## Critical flows
 
@@ -59,4 +69,4 @@ npm.cmd run build
 firebase.cmd emulators:exec --only auth,firestore --project demo-book-match-acceptance "npx.cmd playwright test"
 ```
 
-No deployment should occur until the owner explicitly approves it.
+Deployment was explicitly approved by the owner and completed on 1 August 2026.

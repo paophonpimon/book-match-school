@@ -18,9 +18,6 @@ import {
   getDocs,
   getDocsFromCache,
   getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   query,
   runTransaction,
   serverTimestamp,
@@ -51,13 +48,10 @@ if (firebaseConfigured) {
   adminApp = getApps().find((app) => app.name === ADMIN_APP_NAME)
     ?? initializeApp(env.firebase, ADMIN_APP_NAME)
   adminAuth = getAuth(adminApp)
-  try {
-    adminDb = initializeFirestore(adminApp, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    })
-  } catch {
-    adminDb = getFirestore(adminApp)
-  }
+  // Admin screens must reflect authoritative server state. Keeping the Admin
+  // app in memory prevents deleted members/loans from being restored from an
+  // old IndexedDB snapshot, while the student app keeps its persistent cache.
+  adminDb = getFirestore(adminApp)
   if (env.useFirebaseEmulators && !adminEmulatorsConnected) {
     connectAuthEmulator(adminAuth, 'http://127.0.0.1:9099', { disableWarnings: true })
     connectFirestoreEmulator(adminDb, '127.0.0.1', 8080)

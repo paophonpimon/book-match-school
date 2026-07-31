@@ -6,6 +6,9 @@ import { buildBookUniqueKey, planBookIdentityMutation } from '../services/adminA
 
 const rules = readFileSync(resolve(process.cwd(), 'firestore.rules'), 'utf8')
 const adminAuthSource = readFileSync(resolve(process.cwd(), 'src/services/adminAuth.ts'), 'utf8')
+const adminStudentsSource = readFileSync(resolve(process.cwd(), 'src/services/adminStudents.ts'), 'utf8')
+const adminTermsSource = readFileSync(resolve(process.cwd(), 'src/services/adminTerms.ts'), 'utf8')
+const loansSource = readFileSync(resolve(process.cwd(), 'src/services/loans.ts'), 'utf8')
 
 function expectedKey(title: string, author: string) {
   const normalize = (value: string) => (
@@ -91,5 +94,13 @@ describe('Admin Firestore transaction rules', () => {
   it('refreshes and verifies the Admin token before mutating', () => {
     expect(adminAuthSource).toContain('user.getIdTokenResult(true)')
     expect(adminAuthSource).toContain('await getVerifiedAdminFirebaseContext()')
+  })
+
+  it('uses authoritative server reads for Admin membership, loan and term data', () => {
+    expect(adminStudentsSource).toContain('getDocsFromServer')
+    expect(adminStudentsSource).toContain('getDocFromServer')
+    expect(adminTermsSource).toContain('getDocsFromServer')
+    expect(loansSource).toContain('const snapshot = await getDocsFromServer(query(')
+    expect(adminAuthSource).not.toContain('persistentLocalCache')
   })
 })
