@@ -1,4 +1,4 @@
-import type { BookLoanLock, Loan, LoanStatus } from '../types'
+import type { BookLoanLock, Loan, LoanStatus, MembershipStatus, TermStatus } from '../types'
 
 export const DEFAULT_LOAN_DAYS = 7
 export const MAX_LOAN_DAYS = 30
@@ -43,6 +43,48 @@ export function canStudentReadLoan(viewerUid: string, loanUid: string) {
 export function assertLoanRequestAvailable(hasActiveKey: boolean, hasBookLock: boolean) {
   if (hasActiveKey) throw new Error('คุณมีคำขอยืมหนังสือเล่มนี้อยู่แล้ว')
   if (hasBookLock) throw new Error('หนังสือเล่มนี้มีผู้ยืมหรือกำลังรอรับแล้ว')
+}
+
+export interface LoanRequestAccessContext {
+  auth: { uid: string; email: string | null; emailVerified: boolean }
+  profile: {
+    uid: string
+    studentId: string
+    displayName: string
+    firstName: string
+    lastName: string
+    className: string
+    studentNumber: string
+  } | null
+  membershipUid: { uid: string; studentId: string; email: string } | null
+  membership: { uid: string; studentId: string; email: string; status: MembershipStatus } | null
+  currentTermId: string
+  term: { id: string; status: TermStatus } | null
+}
+
+export function validateLoanRequestAccess(context: LoanRequestAccessContext) {
+  const email = context.auth.email?.trim().toLocaleLowerCase('en-US') ?? ''
+  if (!email || !context.auth.emailVerified) throw new Error('บัญชี Google ต้องมีอีเมลที่ยืนยันแล้ว')
+  if (!context.profile || context.profile.uid !== context.auth.uid) throw new Error('ไม่พบโปรไฟล์ของบัญชีนี้')
+  if (!context.profile.studentId) throw new Error('โปรไฟล์ยังไม่มีเลขประจำตัวนักเรียน')
+  if (!context.membershipUid
+    || context.membershipUid.uid !== context.auth.uid
+    || context.membershipUid.studentId !== context.profile.studentId
+    || context.membershipUid.email.toLocaleLowerCase('en-US') !== email) {
+    throw new Error('ข้อมูลผูกบัญชีกับเลขประจำตัวนักเรียนไม่ตรงกัน')
+  }
+  if (!context.membership
+    || context.membership.uid !== context.auth.uid
+    || context.membership.studentId !== context.profile.studentId
+    || context.membership.email.toLocaleLowerCase('en-US') !== email) {
+    throw new Error('ข้อมูลสมาชิกและโปรไฟล์ไม่ตรงกัน')
+  }
+  if (context.membership.status !== 'active') throw new Error('บัญชีสมาชิกไม่ได้อยู่ในสถานะใช้งาน กรุณาติดต่อผู้ดูแล')
+  if (!context.currentTermId || !context.term || context.term.id !== context.currentTermId) {
+    throw new Error('ยังไม่ได้ตั้งค่าภาคเรียนปัจจุบัน')
+  }
+  if (context.term.status !== 'active') throw new Error('ภาคเรียนปัจจุบันไม่ได้อยู่ในสถานะใช้งาน')
+  return { profile: context.profile, termId: context.currentTermId }
 }
 
 export type LoanLockState = { loanId: string; status: 'approved' | 'borrowed' } | null
@@ -120,6 +162,22 @@ export function latestLoanForBook(loans: Loan[], bookId: string) {
   return loans
     .filter((loan) => loan.bookId === bookId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+}
+
+export function canStartReadingBook(loans: Loan[], bookId: string) {
+  return loans.some((loan) => loan.bookId === bookId && loan.status === 'borrowed')
+}
+
+export function readingLoanForBook(loans: Loan[], bookId: string) {
+  return loans
+    .filter((loan) => loan.bookId === bookId
+      && loan.borrowedAt
+      && (loan.status === 'borrowed' || loan.status === 'returned'))
+    .sort((a, b) => new Date(b.borrowedAt!).getTime() - new Date(a.borrowedAt!).getTime())[0] ?? null
+}
+
+export function canReviewBook(loans: Loan[], bookId: string) {
+  return readingLoanForBook(loans, bookId) !== null
 }
 
 export type LoanAvailabilityTone = 'available' | 'pending' | 'approved' | 'borrowed' | 'overdue' | 'unavailable'

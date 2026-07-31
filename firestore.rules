@@ -181,9 +181,21 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    function validLoanForReading(uid, termId, bookId, loanId) {
+      let loanPath = /databases/$(database)/documents/loans/$(loanId);
+      let loan = get(loanPath).data;
+      return shortText(loanId, 1, 128)
+        && exists(loanPath)
+        && loan.uid == uid
+        && loan.termId == termId
+        && loan.bookId == bookId
+        && loan.status in ['borrowed', 'returned']
+        && loan.borrowedAt is timestamp;
+    }
+
     function validUserBook(recordId) {
       return request.resource.data.keys().hasOnly([
-          'uid', 'termId', 'bookId', 'status', 'rating', 'review', 'moodAfterReading',
+          'uid', 'termId', 'bookId', 'loanId', 'status', 'rating', 'review', 'moodAfterReading',
           'favoriteAspect', 'likedAt', 'startedAt', 'readAt', 'updatedAt',
           'lifetimeReadCredited', 'lifetimeCreditedAt'
         ])
@@ -193,6 +205,15 @@ service cloud.firestore {
         && shortText(request.resource.data.termId, 1, 40)
         && shortText(request.resource.data.bookId, 1, 120)
         && request.resource.data.status in ['liked', 'saved', 'reading', 'read']
+        && ((request.resource.data.status in ['liked', 'saved']
+            && request.resource.data.get('loanId', null) == null)
+          || (request.resource.data.status in ['reading', 'read']
+            && validLoanForReading(
+              request.resource.data.uid,
+              request.resource.data.termId,
+              request.resource.data.bookId,
+              request.resource.data.get('loanId', '')
+            )))
         && (request.resource.data.rating == null
           || (request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5))
         && (request.resource.data.review == null || shortText(request.resource.data.review, 0, 300))
@@ -220,7 +241,7 @@ service cloud.firestore {
       return (resource.data.status == 'read' && request.resource.data.status == 'read')
         || (resource.data.status == 'reading' && request.resource.data.status in ['reading', 'read'])
         || (resource.data.status in ['liked', 'saved']
-          && request.resource.data.status in ['liked', 'saved', 'reading', 'read'])
+          && request.resource.data.status in ['liked', 'saved', 'reading'])
         || (!(resource.data.status in ['liked', 'saved', 'reading', 'read'])
           && request.resource.data.status in ['liked', 'saved', 'reading']);
     }
@@ -235,14 +256,15 @@ service cloud.firestore {
       // The exact UID is embedded between termId and bookId in the canonical ID.
       allow get: if isAdmin() || userBookIdBelongsToSignedInUser(recordId);
       allow list: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow create: if validUserBook(recordId);
+      allow create: if validUserBook(recordId)
+        && request.resource.data.status in ['liked', 'saved', 'reading'];
       allow update: if validUserBook(recordId)
         && validUserBookStatusTransition()
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.termId == resource.data.termId
         && request.resource.data.bookId == resource.data.bookId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'rating', 'review', 'moodAfterReading', 'favoriteAspect',
+          'loanId', 'status', 'rating', 'review', 'moodAfterReading', 'favoriteAspect',
           'likedAt', 'startedAt', 'readAt', 'updatedAt',
           'lifetimeReadCredited', 'lifetimeCreditedAt'
         ]);
@@ -250,6 +272,39 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid
         && resource.data.status != 'read'
         && activeMember(request.auth.uid);
+    }
+
+    function validBookReview(reviewId) {
+      let userBookId = request.resource.data.termId + '_' + request.resource.data.uid + '_' + request.resource.data.bookId;
+      let userBookPath = /databases/$(database)/documents/userBooks/$(userBookId);
+      let profilePath = /databases/$(database)/documents/profiles/$(request.resource.data.uid);
+      let completedBook = getAfter(userBookPath).data;
+      return request.resource.data.keys().hasOnly([
+          'uid', 'termId', 'bookId', 'displayName', 'rating', 'review',
+          'moodAfterReading', 'favoriteAspect', 'readAt', 'createdAt'
+        ])
+        && owns(request.resource.data.uid)
+        && reviewId == request.resource.data.termId + '_' + request.resource.data.bookId + '_' + request.resource.data.uid
+        && request.resource.data.termId == currentTermId()
+        && existsAfter(userBookPath)
+        && exists(profilePath)
+        && completedBook.uid == request.auth.uid
+        && completedBook.termId == request.resource.data.termId
+        && completedBook.bookId == request.resource.data.bookId
+        && completedBook.status == 'read'
+        && request.resource.data.displayName == get(profilePath).data.displayName
+        && request.resource.data.rating == completedBook.rating
+        && request.resource.data.review == completedBook.review
+        && request.resource.data.moodAfterReading == completedBook.moodAfterReading
+        && request.resource.data.favoriteAspect == completedBook.favoriteAspect
+        && request.resource.data.readAt == completedBook.readAt
+        && request.resource.data.createdAt == request.time;
+    }
+
+    match /bookReviews/{reviewId} {
+      allow read: if signedIn();
+      allow create: if validBookReview(reviewId);
+      allow update, delete: if false;
     }
 
     function validProgress(recordId) {
@@ -656,6 +711,15 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt;
     }
 
+    function validCurrentLoanTerm(termId) {
+      let settingPath = /databases/$(database)/documents/settings/currentTerm;
+      let termPath = /databases/$(database)/documents/terms/$(termId);
+      return exists(settingPath)
+        && get(settingPath).data.termId == termId
+        && exists(termPath)
+        && get(termPath).data.status == 'active';
+    }
+
     function validStudentLoanCreate(loanId) {
       let profilePath = /databases/$(database)/documents/profiles/$(request.auth.uid);
       let profile = get(profilePath).data;
@@ -666,7 +730,7 @@ service cloud.firestore {
       let lockPath = /databases/$(database)/documents/bookLoanLocks/$(request.resource.data.bookId);
       return owns(request.resource.data.uid)
         && activeMember(request.resource.data.uid)
-        && request.resource.data.termId == currentTermId()
+        && validCurrentLoanTerm(request.resource.data.termId)
         && request.resource.data.status == 'pending'
         && request.resource.data.requestedAt == request.time
         && request.resource.data.createdAt == request.time
@@ -684,12 +748,13 @@ service cloud.firestore {
         && request.resource.data.bookTitle == book.title
         && request.resource.data.bookAuthor == book.author
         && request.resource.data.bookCoverUrl == book.coverUrl
-        && !exists(lockPath)
+        && !existsAfter(lockPath)
         && existsAfter(keyPath)
         && key.loanId == loanId
         && key.uid == request.auth.uid
         && key.bookId == request.resource.data.bookId
         && key.status == 'pending'
+        && request.resource.data.lastAuditId == loanId
         && key.lastAuditId == request.resource.data.lastAuditId;
     }
 
@@ -716,7 +781,7 @@ service cloud.firestore {
         && audit.createdAt == request.time;
     }
 
-    function validAdminLoanUpdate() {
+    function validAdminLoanUpdate(loanId) {
       let approve = resource.data.status == 'pending'
         && request.resource.data.status == 'approved'
         && request.resource.data.approvedAt == request.time
@@ -758,6 +823,15 @@ service cloud.firestore {
           'status', 'returnedAt', 'returnedBy', 'updatedAt', 'lastAuditId'
         ]);
       return isAdmin()
+        && request.resource.data.id == loanId
+        && loanImmutableFieldsValid()
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.lastAuditId, 1, 128)
+        && request.resource.data.loanDays is int
+        && request.resource.data.loanDays >= 1
+        && request.resource.data.loanDays <= 30
+        && request.resource.data.adminNote is string
+        && request.resource.data.adminNote.size() <= 500
         && (approve || reject || pickup || renew || returned);
     }
 
@@ -766,16 +840,11 @@ service cloud.firestore {
       allow list: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
       allow create: if validLoanSchema(loanId)
         && validLoanStatusShape()
-        && validStudentLoanCreate(loanId)
-        && validLoanAuditLink(loanId);
+        && validStudentLoanCreate(loanId);
       // Admin writes are validated in one direction: active key/lock/audit -> loan
       // through each companion document's own rule. Avoid a circular loan -> audit
       // getAfter() check here, which causes valid atomic approval commits to be denied.
-      allow update: if (isAdmin()
-          && validLoanSchema(loanId)
-          && validLoanStatusShape()
-          && loanImmutableFieldsValid()
-          && validAdminLoanUpdate())
+      allow update: if validAdminLoanUpdate(loanId)
         || (validLoanSchema(loanId)
           && validLoanStatusShape()
           && loanImmutableFieldsValid()
@@ -823,7 +892,7 @@ service cloud.firestore {
       allow create: if owns(request.resource.data.uid)
         && validActiveKey(keyId)
         && request.resource.data.status == 'pending'
-        && activeKeyMatchesLoan();
+        && request.resource.data.lastAuditId == request.resource.data.loanId;
       allow update: if isAdmin()
         && validActiveKey(keyId)
         && request.resource.data.uid == resource.data.uid
@@ -883,8 +952,6 @@ service cloud.firestore {
     }
 
     function validLoanAuditCreate(auditId) {
-      let loanPath = /databases/$(database)/documents/loans/$(request.resource.data.loanId);
-      let loan = getAfter(loanPath).data;
       let studentAction = request.resource.data.action in ['request', 'cancel']
         && request.resource.data.actorUid == request.auth.uid
         && request.resource.data.actorEmail == null
@@ -936,12 +1003,12 @@ service cloud.firestore {
         && request.resource.data.note is string
         && request.resource.data.note.size() <= 500
         && request.resource.data.createdAt == request.time
-        && existsAfter(loanPath)
-        && loan.lastAuditId == auditId
-        && loan.bookId == request.resource.data.bookId
-        && loan.uid == request.resource.data.studentUid
-        && loan.status == request.resource.data.nextStatus
         && actionTransition
+        && (request.resource.data.action != 'request'
+          || auditId == request.resource.data.loanId)
+        // Loan rules validate their audit through getAfter(). Audit writes must
+        // never read the loan back: doing so creates loan -> audit -> loan and
+        // Firestore reaches its expression limit before it can authorize either.
         && (studentAction || adminAction);
     }
 

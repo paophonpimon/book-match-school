@@ -31,6 +31,7 @@ import {
 } from 'firebase/firestore'
 import type {
   AcademicTerm,
+  BookReview,
   BookStatus,
   Profile,
   Reader,
@@ -347,6 +348,7 @@ export async function loadRemoteStudentState(user: User, termId: string): Promis
       uid: user.uid,
       termId,
       bookId,
+      loanId: typeof data.loanId === 'string' ? data.loanId : null,
       status: data.status,
       rating: typeof data.rating === 'number' ? data.rating : null,
       review: typeof data.review === 'string' ? data.review : null,
@@ -591,6 +593,78 @@ export interface CompleteBookResult {
   readerStats: ReaderStats
 }
 
+export interface BookReviewSummary {
+  reviews: BookReview[]
+  ratingAverage: number
+  ratingCount: number
+}
+
+export async function loadBookReviewsRemote(termId: string, bookId: string): Promise<BookReviewSummary> {
+  if (!db || !termId || !bookId) return { reviews: [], ratingAverage: 0, ratingCount: 0 }
+  const [reviewsSnapshot, statsSnapshot] = await Promise.all([
+    getDocs(query(collection(db, 'bookReviews'), where('bookId', '==', bookId))),
+    getDoc(doc(db, 'bookStats', `${termId}_${bookId}`)),
+  ])
+  const reviews = reviewsSnapshot.docs.map((reviewSnapshot): BookReview | null => {
+    const data = reviewSnapshot.data()
+    if (data.termId !== termId || data.bookId !== bookId) return null
+    const rating = Number(data.rating ?? 0)
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5 || typeof data.review !== 'string') return null
+    return {
+      id: reviewSnapshot.id,
+      uid: String(data.uid ?? ''),
+      termId: String(data.termId ?? ''),
+      bookId: String(data.bookId ?? ''),
+      displayName: String(data.displayName ?? 'นักอ่าน'),
+      rating,
+      review: data.review,
+      moodAfterReading: String(data.moodAfterReading ?? ''),
+      favoriteAspect: String(data.favoriteAspect ?? ''),
+      readAt: asIso(data.readAt),
+      createdAt: asIso(data.createdAt),
+    }
+  }).filter((review): review is BookReview => review !== null)
+    .sort((left, right) => right.readAt.localeCompare(left.readAt))
+    .slice(0, 20)
+  const stats = statsSnapshot.data()
+  const ratingCount = Math.max(0, Number(stats?.ratingCount ?? 0))
+  const ratingTotal = Math.max(0, Number(stats?.ratingTotal ?? 0))
+  return {
+    reviews,
+    ratingAverage: ratingCount > 0 ? ratingTotal / ratingCount : 0,
+    ratingCount,
+  }
+}
+
+export async function publishOwnBookReviewRemote(userBook: UserBook, profile: Profile) {
+  if (userBook.status !== 'read' || !userBook.rating || !userBook.review) return false
+  const firestore = requireFirestore()
+  const userBookRef = doc(firestore, 'userBooks', `${userBook.termId}_${userBook.uid}_${userBook.bookId}`)
+  const reviewRef = doc(firestore, 'bookReviews', `${userBook.termId}_${userBook.bookId}_${userBook.uid}`)
+  return runTransaction(firestore, async (transaction) => {
+    const [reviewSnapshot, completedSnapshot] = await Promise.all([
+      transaction.get(reviewRef),
+      transaction.get(userBookRef),
+    ])
+    if (reviewSnapshot.exists()) return false
+    const completed = completedSnapshot.data()
+    if (!completedSnapshot.exists() || completed?.status !== 'read') return false
+    transaction.set(reviewRef, {
+      uid: userBook.uid,
+      termId: userBook.termId,
+      bookId: userBook.bookId,
+      displayName: profile.displayName,
+      rating: completed.rating,
+      review: completed.review,
+      moodAfterReading: completed.moodAfterReading,
+      favoriteAspect: completed.favoriteAspect,
+      readAt: completed.readAt,
+      createdAt: serverTimestamp(),
+    })
+    return true
+  })
+}
+
 export async function completeBookRemote(userBook: UserBook, profile: Profile): Promise<CompleteBookResult> {
   if (!userBook.rating || userBook.rating < 1 || userBook.rating > 5) throw new Error('คะแนนรีวิวไม่ถูกต้อง')
   const review = userBook.review?.trim() ?? ''
@@ -600,6 +674,7 @@ export async function completeBookRemote(userBook: UserBook, profile: Profile): 
   const progressRef = doc(firestore, 'progress', `${userBook.termId}_${userBook.uid}`)
   const statsRef = doc(firestore, 'bookStats', `${userBook.termId}_${userBook.bookId}`)
   const readerStatsRef = doc(firestore, 'readerStats', userBook.uid)
+  const reviewRef = doc(firestore, 'bookReviews', `${userBook.termId}_${userBook.bookId}_${userBook.uid}`)
   return runTransaction(firestore, async (transaction) => {
     const [previousSnapshot, progressSnapshot, statsSnapshot, readerStatsSnapshot] = await Promise.all([
       transaction.get(userBookRef), transaction.get(progressRef), transaction.get(statsRef),
@@ -610,6 +685,9 @@ export async function completeBookRemote(userBook: UserBook, profile: Profile): 
     const previousReaderStats = normalizeReaderStats(userBook.uid, readerStatsSnapshot.data())
     if (previousStatus === 'read' || previous?.lifetimeReadCredited === true) {
       return { counted: false, levelUp: false, readerStats: previousReaderStats }
+    }
+    if (previousStatus !== 'reading') {
+      throw new Error('ต้องเริ่มอ่านหนังสือหลังรับจากห้องสมุดก่อนจึงจะส่งรีวิวได้')
     }
     const progress = progressSnapshot.data()
     const creditPlan = planLifetimeReadCredit(
@@ -628,6 +706,7 @@ export async function completeBookRemote(userBook: UserBook, profile: Profile): 
       uid: userBook.uid,
       termId: userBook.termId,
       bookId: userBook.bookId,
+      loanId: userBook.loanId ?? (typeof previous?.loanId === 'string' ? previous.loanId : null),
       status: 'read',
       rating: userBook.rating,
       review,
@@ -664,6 +743,18 @@ export async function completeBookRemote(userBook: UserBook, profile: Profile): 
       currentLevel: nextLevel,
       updatedAt: timestamp,
       lastCreditedUserBookId: userBookRecordId,
+    })
+    transaction.set(reviewRef, {
+      uid: userBook.uid,
+      termId: userBook.termId,
+      bookId: userBook.bookId,
+      displayName: profile.displayName,
+      rating: userBook.rating,
+      review,
+      moodAfterReading: userBook.moodAfterReading,
+      favoriteAspect: userBook.favoriteAspect,
+      readAt: timestamp,
+      createdAt: timestamp,
     })
     return {
       counted: true,

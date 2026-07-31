@@ -14,7 +14,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import type { Book, BookLoanLock, Loan, LoanAuditAction, LoanStatus, Profile } from '../types'
+import type { Book, BookLoanLock, Loan, LoanAuditAction, LoanStatus, MembershipStatus, Profile, TermStatus } from '../types'
 import {
   calculateDueAt,
   DEFAULT_LOAN_DAYS,
@@ -22,6 +22,7 @@ import {
   MAX_RENEW_COUNT,
   normalizeLoanDays,
   planLoanTransition,
+  validateLoanRequestAccess,
 } from '../utils/loans'
 import { getAdminFirebaseContext, getVerifiedAdminFirebaseContext } from './adminAuth'
 import { currentStudentUser, db } from './firebase'
@@ -47,6 +48,16 @@ function nullableIso(value: unknown) {
 
 function isLoanStatus(value: unknown): value is LoanStatus {
   return ['pending', 'approved', 'borrowed', 'returned', 'rejected', 'cancelled'].includes(String(value))
+}
+
+function membershipStatus(value: unknown): MembershipStatus {
+  return ['active', 'suspended', 'graduated', 'transferred'].includes(String(value))
+    ? value as MembershipStatus
+    : 'suspended'
+}
+
+function termStatus(value: unknown): TermStatus {
+  return ['draft', 'active', 'closed'].includes(String(value)) ? value as TermStatus : 'draft'
 }
 
 function normalizeLoanSnapshot(snapshot: QueryDocumentSnapshot<DocumentData> | DocumentSnapshot<DocumentData>): Loan {
@@ -146,65 +157,136 @@ export async function requestLoanRemote(book: Book, profile: Profile, termId: st
   const firestore = requireStudentFirestore()
   const user = currentStudentUser()
   if (!user || user.uid !== profile.uid) throw new Error('ไม่พบสิทธิ์ของนักเรียนสำหรับส่งคำขอยืม')
+  let tokenSummary: { uid: string; email: string | null; emailVerified: boolean } | null = null
   const loanRef = doc(collection(firestore, 'loans'))
-  const auditRef = doc(collection(firestore, 'loanAuditLogs'))
+  // A deterministic request-audit id lets Rules prove the relationship without
+  // a circular loan -> audit -> loan getAfter() dependency.
+  const auditRef = doc(firestore, 'loanAuditLogs', loanRef.id)
   const activeRef = doc(firestore, 'studentLoanActiveKeys', activeKeyId(user.uid, book.id))
   const lockRef = doc(firestore, 'bookLoanLocks', book.id)
   const bookRef = doc(firestore, 'books', book.id)
-
-  await runTransaction(firestore, async (transaction) => {
-    const [activeSnapshot, lockSnapshot, bookSnapshot] = await Promise.all([
-      transaction.get(activeRef),
-      transaction.get(lockRef),
-      transaction.get(bookRef),
-    ])
-    assertLoanRequestAvailable(activeSnapshot.exists(), lockSnapshot.exists())
-    if (!bookSnapshot.exists() || bookSnapshot.data().active !== true) throw new Error('หนังสือเล่มนี้ไม่พร้อมให้ยืม')
-    const timestamp = serverTimestamp()
-    transaction.set(loanRef, {
-      id: loanRef.id,
+  const profileRef = doc(firestore, 'profiles', user.uid)
+  const membershipUidRef = doc(firestore, 'studentMembershipUids', user.uid)
+  const currentTermRef = doc(firestore, 'settings', 'currentTerm')
+  try {
+    const token = await user.getIdTokenResult(true)
+    tokenSummary = {
       uid: user.uid,
-      termId,
-      bookId: book.id,
-      status: 'pending',
-      requestedAt: timestamp,
-      approvedAt: null,
-      borrowedAt: null,
-      dueAt: null,
-      returnedAt: null,
-      rejectedAt: null,
-      cancelledAt: null,
-      approvedBy: null,
-      returnedBy: null,
-      renewCount: 0,
-      loanDays: DEFAULT_LOAN_DAYS,
-      adminNote: '',
-      studentDisplayName: profile.displayName,
-      studentFirstName: profile.firstName ?? '',
-      studentLastName: profile.lastName ?? '',
-      studentClassroom: profile.className,
-      studentNumber: profile.studentNumber,
-      studentId: profile.studentId ?? '',
-      bookTitle: book.title,
-      bookAuthor: book.author,
-      bookCoverUrl: book.coverUrl,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      lastAuditId: auditRef.id,
+      email: user.email?.toLocaleLowerCase('en-US') ?? null,
+      emailVerified: token.claims.email_verified === true,
+    }
+    await runTransaction(firestore, async (transaction) => {
+      const [activeSnapshot, lockSnapshot, bookSnapshot, profileSnapshot, membershipUidSnapshot, currentTermSnapshot] = await Promise.all([
+        transaction.get(activeRef),
+        transaction.get(lockRef),
+        transaction.get(bookRef),
+        transaction.get(profileRef),
+        transaction.get(membershipUidRef),
+        transaction.get(currentTermRef),
+      ])
+      const remoteProfile = profileSnapshot.data()
+      const studentId = String(remoteProfile?.studentId ?? '')
+      const currentTermId = String(currentTermSnapshot.data()?.termId ?? '')
+      const membershipRef = doc(firestore, 'studentMemberships', studentId || '__missing__')
+      const termRef = doc(firestore, 'terms', currentTermId || '__missing__')
+      const [membershipSnapshot, termSnapshot] = await Promise.all([
+        transaction.get(membershipRef),
+        transaction.get(termRef),
+      ])
+      const access = validateLoanRequestAccess({
+        auth: tokenSummary!,
+        profile: profileSnapshot.exists() ? {
+          uid: String(remoteProfile?.uid ?? ''),
+          studentId,
+          displayName: String(remoteProfile?.displayName ?? ''),
+          firstName: String(remoteProfile?.firstName ?? ''),
+          lastName: String(remoteProfile?.lastName ?? ''),
+          className: String(remoteProfile?.className ?? ''),
+          studentNumber: String(remoteProfile?.studentNumber ?? ''),
+        } : null,
+        membershipUid: membershipUidSnapshot.exists() ? {
+          uid: String(membershipUidSnapshot.data().uid ?? ''),
+          studentId: String(membershipUidSnapshot.data().studentId ?? ''),
+          email: String(membershipUidSnapshot.data().email ?? ''),
+        } : null,
+        membership: membershipSnapshot.exists() ? {
+          uid: String(membershipSnapshot.data().uid ?? ''),
+          studentId: String(membershipSnapshot.data().studentId ?? ''),
+          email: String(membershipSnapshot.data().email ?? ''),
+          status: membershipStatus(membershipSnapshot.data().status),
+        } : null,
+        currentTermId,
+        term: termSnapshot.exists() ? {
+          id: termSnapshot.id,
+          status: termStatus(termSnapshot.data().status),
+        } : null,
+      })
+      assertLoanRequestAvailable(activeSnapshot.exists(), lockSnapshot.exists())
+      if (!bookSnapshot.exists() || bookSnapshot.data().active !== true) throw new Error('หนังสือเล่มนี้ไม่พร้อมให้ยืม')
+      const currentBook = bookSnapshot.data()
+      const timestamp = serverTimestamp()
+      transaction.set(loanRef, {
+        id: loanRef.id,
+        uid: user.uid,
+        termId: access.termId,
+        bookId: book.id,
+        status: 'pending',
+        requestedAt: timestamp,
+        approvedAt: null,
+        borrowedAt: null,
+        dueAt: null,
+        returnedAt: null,
+        rejectedAt: null,
+        cancelledAt: null,
+        approvedBy: null,
+        returnedBy: null,
+        renewCount: 0,
+        loanDays: DEFAULT_LOAN_DAYS,
+        adminNote: '',
+        studentDisplayName: access.profile.displayName,
+        studentFirstName: access.profile.firstName,
+        studentLastName: access.profile.lastName,
+        studentClassroom: access.profile.className,
+        studentNumber: access.profile.studentNumber,
+        studentId: access.profile.studentId,
+        bookTitle: String(currentBook.title ?? ''),
+        bookAuthor: String(currentBook.author ?? ''),
+        bookCoverUrl: String(currentBook.coverUrl ?? ''),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        lastAuditId: auditRef.id,
+      })
+      transaction.set(activeRef, {
+        uid: user.uid,
+        bookId: book.id,
+        loanId: loanRef.id,
+        status: 'pending',
+        updatedAt: timestamp,
+        lastAuditId: auditRef.id,
+      })
+      transaction.set(auditRef, auditPayload(
+        'request', loanRef.id, book.id, user.uid, null, 'pending', user.uid, null, '',
+      ))
     })
-    transaction.set(activeRef, {
-      uid: user.uid,
-      bookId: book.id,
-      loanId: loanRef.id,
-      status: 'pending',
-      updatedAt: timestamp,
-      lastAuditId: auditRef.id,
+    return loanRef.id
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : 'unknown'
+    console.error('[Firestore] request-loan failed', {
+      code,
+      token: tokenSummary,
+      expectedTermId: termId,
+      paths: {
+        profile: profileRef.path,
+        membershipUid: membershipUidRef.path,
+        currentTerm: currentTermRef.path,
+        loan: loanRef.path,
+        activeKey: activeRef.path,
+        audit: auditRef.path,
+        pendingBookLock: lockRef.path,
+      },
     })
-    transaction.set(auditRef, auditPayload(
-      'request', loanRef.id, book.id, user.uid, null, 'pending', user.uid, null, '',
-    ))
-  })
-  return loanRef.id
+    throw error
+  }
 }
 
 export async function cancelLoanRemote(loan: Loan) {

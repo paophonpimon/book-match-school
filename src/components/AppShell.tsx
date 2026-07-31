@@ -24,7 +24,7 @@ export function ProtectedShell() {
   })
   if (profileError) return <Navigate to="/setup" state={{ from: location.pathname, profileError }} replace />
   return (
-    <div className="app-shell">
+    <div className={`app-shell${location.pathname === '/discover' ? ' app-shell--discover' : ''}`}>
       <DemoBanner />
       <main className="app-main"><Outlet /></main>
       <BottomNav />

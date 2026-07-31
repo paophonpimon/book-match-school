@@ -1,4 +1,4 @@
-import { CalendarClock, Library, LoaderCircle, RotateCcw } from 'lucide-react'
+import { BookOpen, CalendarClock, Library, LoaderCircle, RotateCcw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
@@ -17,7 +17,7 @@ const tabs: Array<{ id: LoanTab; label: string }> = [
 ]
 
 export function LoanListPage() {
-  const { loans, cancelLoan, reloadLoans, syncing } = useApp()
+  const { loans, userBooks, setBookStatus, cancelLoan, reloadLoans, syncing } = useApp()
   const [tab, setTab] = useState<LoanTab>('pending')
   const [cancellingId, setCancellingId] = useState('')
   const [error, setError] = useState('')
@@ -65,14 +65,28 @@ export function LoanListPage() {
         />
       ) : (
         <div className="loan-list">
-          {visible.map((loan) => <StudentLoanCard key={loan.id} loan={loan} cancelling={cancellingId === loan.id} onCancel={() => void cancel(loan)} />)}
+          {visible.map((loan) => <StudentLoanCard
+            key={loan.id}
+            loan={loan}
+            read={userBooks[loan.bookId]?.status === 'read'}
+            cancelling={cancellingId === loan.id}
+            onCancel={() => void cancel(loan)}
+            onReview={() => {
+              if (userBooks[loan.bookId]?.status === 'read') {
+                navigate(`/books/${loan.bookId}#my-review`)
+                return
+              }
+              setBookStatus(loan.bookId, 'reading')
+              navigate(`/review/${loan.bookId}`)
+            }}
+          />)}
         </div>
       )}
     </div>
   )
 }
 
-function StudentLoanCard({ loan, cancelling, onCancel }: { loan: Loan; cancelling: boolean; onCancel: () => void }) {
+function StudentLoanCard({ loan, read, cancelling, onCancel, onReview }: { loan: Loan; read: boolean; cancelling: boolean; onCancel: () => void; onReview: () => void }) {
   const overdue = isLoanOverdue(loan)
   return (
     <article className={`loan-list-item ${overdue ? 'loan-list-item--overdue' : ''}`}>
@@ -99,6 +113,11 @@ function StudentLoanCard({ loan, cancelling, onCancel }: { loan: Loan; cancellin
       {loan.status === 'pending' && (
         <button className="button button--secondary button--small" type="button" onClick={onCancel} disabled={cancelling}>
           {cancelling ? <LoaderCircle className="spin" /> : null} {cancelling ? 'กำลังยกเลิก…' : 'ยกเลิกคำขอ'}
+        </button>
+      )}
+      {loan.status === 'returned' && (
+        <button className="button button--primary button--small" type="button" onClick={onReview}>
+          <BookOpen /> {read ? 'ดูรีวิวของฉัน' : 'รีวิวหนังสือ'}
         </button>
       )}
     </article>

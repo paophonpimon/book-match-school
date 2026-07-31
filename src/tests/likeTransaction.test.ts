@@ -57,6 +57,7 @@ describe('liked book transaction', () => {
       uid: 'student-1',
       termId: '2569-1',
       bookId: 'wonder',
+      loanId: null,
       status: 'liked',
       rating: null,
       review: null,

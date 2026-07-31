@@ -22,6 +22,7 @@ import {
 import { readStored, writeStored } from '../services/storage'
 import { readSwipeSession, removeSwipeSession, swipeStorageKey, writeSwipeSession } from '../services/swipeStorage'
 import { cancelLoanRemote, loadBookLoanLocks, loadStudentLoans, requestLoanRemote } from '../services/loans'
+import { readingLoanForBook } from '../utils/loans'
 import type {
   AcademicTerm,
   Book,
@@ -346,6 +347,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     try {
       requireActiveMember()
+      if (status === 'reading' && !readingLoanForBook(loans, bookId)) {
+        throw new Error('ต้องได้รับหนังสือจากห้องสมุดก่อนจึงจะเริ่มอ่านได้')
+      }
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : 'บัญชีสมาชิกไม่พร้อมใช้งาน')
       return
@@ -355,6 +359,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       uid: profile.uid,
       termId: currentTerm.id,
       bookId,
+      loanId: status === 'reading'
+        ? (previous?.loanId ?? readingLoanForBook(loans, bookId)?.id ?? null)
+        : (previous?.loanId ?? null),
       status,
       rating: previous?.rating ?? null,
       review: previous?.review ?? null,
@@ -460,12 +467,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!profile || !currentTerm || !authUser) throw new Error('ไม่พบโปรไฟล์นักอ่าน')
     requireActiveMember()
     const previous = userBooks[bookId]
+    const readingLoan = readingLoanForBook(loans, bookId)
+    if (previous?.status !== 'reading' || !readingLoan) {
+      throw new Error('ต้องเริ่มอ่านหนังสือหลังรับจากห้องสมุดก่อนจึงจะส่งรีวิวได้')
+    }
     const now = new Date().toISOString()
     const next: UserBook = {
       ...previous,
       uid: profile.uid,
       termId: currentTerm.id,
       bookId,
+      loanId: previous.loanId ?? readingLoan.id,
       status: 'read',
       ...review,
       likedAt: previous?.likedAt ?? null,

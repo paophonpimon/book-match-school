@@ -3,6 +3,8 @@ import type { BookLoanLock, Loan } from '../types'
 import {
   assertLoanRequestAvailable,
   calculateDueAt,
+  canReviewBook,
+  canStartReadingBook,
   canStudentChangeLoan,
   canStudentReadLoan,
   DAY_MS,
@@ -14,6 +16,7 @@ import {
   planBorrowLock,
   planLoanTransition,
   planReleaseLock,
+  readingLoanForBook,
 } from '../utils/loans'
 
 const now = '2026-08-01T09:00:00.000Z'
@@ -79,6 +82,20 @@ describe('loan request and student permissions', () => {
 
   it.each(['approved', 'borrowed', 'returned'] as const)('does not let a student set status to %s', (status) => {
     expect(canStudentChangeLoan('pending', status)).toBe(false)
+  })
+
+  it('allows reading only after the librarian confirms pickup', () => {
+    expect(canStartReadingBook([loan()], 'book-1')).toBe(false)
+    expect(canStartReadingBook([loan({ status: 'approved' })], 'book-1')).toBe(false)
+    expect(canStartReadingBook([loan({ status: 'borrowed', borrowedAt: now })], 'book-1')).toBe(true)
+    expect(canStartReadingBook([loan({ status: 'returned', borrowedAt: now, returnedAt: now })], 'book-1')).toBe(false)
+  })
+
+  it('keeps review access after a borrowed book is returned', () => {
+    const returned = loan({ status: 'returned', borrowedAt: now, returnedAt: now })
+    expect(canReviewBook([returned], 'book-1')).toBe(true)
+    expect(readingLoanForBook([returned], 'book-1')?.id).toBe('loan-1')
+    expect(canReviewBook([loan({ status: 'approved' })], 'book-1')).toBe(false)
   })
 })
 

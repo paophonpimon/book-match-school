@@ -6,6 +6,7 @@ import { BookCover } from '../../components/BookCover'
 import { EmptyState } from '../../components/EmptyState'
 import { PageHeader } from '../../components/PageHeader'
 import { ProgressSteps } from '../../components/ProgressSteps'
+import { canReviewBook } from '../../utils/loans'
 import { validateReview } from '../../utils/review'
 
 const feelings = [['happy', '😊', 'ชอบมาก'], ['fun', '😄', 'สนุกดี'], ['okay', '😌', 'ได้ข้อคิด'], ['calm', '🌿', 'สบายใจ'], ['sad', '🥹', 'ซาบซึ้ง']]
@@ -13,7 +14,7 @@ const aspects = ['เนื้อเรื่อง', 'ตัวละคร', '
 
 export function ReviewPage() {
   const { bookId } = useParams()
-  const { books, settings, completeBook } = useApp()
+  const { books, settings, userBooks, loans, syncing, completeBook } = useApp()
   const navigate = useNavigate()
   const book = books.find((item) => item.id === bookId)
   const [rating, setRating] = useState(0)
@@ -23,6 +24,9 @@ export function ReviewPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   if (!book) return <div className="page"><PageHeader back /><EmptyState title="ไม่พบหนังสือ" detail="กลับไปที่ชั้นหนังสือแล้วลองอีกครั้ง" /></div>
+  if (userBooks[book.id]?.status !== 'reading' || !canReviewBook(loans, book.id)) {
+    return <div className="page"><PageHeader back /><EmptyState title="ยังรีวิวหนังสือเล่มนี้ไม่ได้" detail="ต้องรับหนังสือจากห้องสมุดและเริ่มอ่านก่อนจึงจะส่งรีวิวได้" /></div>
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -50,7 +54,7 @@ export function ReviewPage() {
         <fieldset><legend>ชอบอะไรที่สุด?</legend><div className="chip-grid">{aspects.map((aspect) => <button type="button" key={aspect} className={favoriteAspect === aspect ? 'active' : ''} onClick={() => setAspect(aspect)}>{favoriteAspect === aspect && <Check />} {aspect}</button>)}</div></fieldset>
         <label>เล่าให้เพื่อนฟังสั้น ๆ<textarea value={review} onChange={(event) => setReview(event.target.value)} maxLength={300} rows={4} placeholder={`อย่างน้อย ${settings.reviewMinChars} ตัวอักษร เช่น “ชอบตรงที่ตัวละครไม่ยอมแพ้ ทำให้อยากลองทำสิ่งใหม่”`} /><small className={review.trim().length < settings.reviewMinChars ? 'counter counter--warning' : 'counter'}>{review.length}/300</small></label>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="button button--primary button--wide" disabled={saving}><Award /> {saving ? 'กำลังยืนยัน…' : 'ส่งรีวิวและยืนยันการอ่าน'}</button>
+        <button className="button button--primary button--wide" disabled={saving || syncing}><Award /> {saving ? 'กำลังยืนยัน…' : syncing ? 'กำลังเตรียมข้อมูลการอ่าน…' : 'ส่งรีวิวและยืนยันการอ่าน'}</button>
       </form>
     </div>
   )

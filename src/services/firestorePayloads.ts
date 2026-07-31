@@ -1,7 +1,7 @@
 import type { BookStatus, UserBook } from '../types'
 
 export const userBookWriteFields = [
-  'uid', 'termId', 'bookId', 'status', 'rating', 'review', 'moodAfterReading',
+  'uid', 'termId', 'bookId', 'loanId', 'status', 'rating', 'review', 'moodAfterReading',
   'favoriteAspect', 'likedAt', 'startedAt', 'readAt', 'updatedAt',
   'lifetimeReadCredited', 'lifetimeCreditedAt',
 ] as const
@@ -26,6 +26,7 @@ export function buildUserBookWritePayload(
     uid: userBook.uid,
     termId: userBook.termId,
     bookId: userBook.bookId,
+    loanId: previous?.loanId ?? userBook.loanId ?? null,
     status,
     rating: previous?.rating ?? null,
     review: previous?.review ?? null,

@@ -88,6 +88,7 @@ export interface UserBook {
   uid: string
   termId: string
   bookId: string
+  loanId?: string | null
   status: BookStatus
   rating: number | null
   review: string | null
@@ -99,6 +100,20 @@ export interface UserBook {
   updatedAt: string
   lifetimeReadCredited?: boolean
   lifetimeCreditedAt?: string | null
+}
+
+export interface BookReview {
+  id: string
+  uid: string
+  termId: string
+  bookId: string
+  displayName: string
+  rating: number
+  review: string
+  moodAfterReading: string
+  favoriteAspect: string
+  readAt: string
+  createdAt: string
 }
 
 export interface Reader {

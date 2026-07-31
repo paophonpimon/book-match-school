@@ -273,7 +273,7 @@ function AdminLoanCard({ loan, busy, onAction }: { loan: Loan; busy: boolean; on
         <p>{loan.bookAuthor || 'ไม่ระบุผู้แต่ง'}</p>
         <div className="admin-student-info">
           <strong>{loan.studentFirstName} {loan.studentLastName} · “{loan.studentDisplayName}”</strong>
-          <span>{loan.studentClassroom} · เลขที่ {loan.studentNumber} · รหัส {loan.studentId}</span>
+          <span>{loan.studentClassroom} · เลขที่ {loan.studentNumber} · เลขประจำตัวนักเรียน {loan.studentId}</span>
         </div>
         <dl className="admin-loan-dates">
           <DateItem label="ขอยืม" value={loan.requestedAt} />
