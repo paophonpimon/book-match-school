@@ -3,6 +3,7 @@ import {
   classNameFromGradeLevel,
   containsBlockedProfileLanguage,
   gradeLevelFromClassName,
+  hasPermanentStudentId,
   isSafeProfileDisplayName,
   validateStudentProfile,
 } from '../utils/profile'
@@ -24,6 +25,13 @@ describe('student profile fields', () => {
 
   it('accepts a complete student profile', () => {
     expect(validateStudentProfile(validProfile)).toBeNull()
+  })
+
+  it('locks the student ID only after a permanent ID actually exists', () => {
+    expect(hasPermanentStudentId(undefined)).toBe(false)
+    expect(hasPermanentStudentId('')).toBe(false)
+    expect(hasPermanentStudentId('   ')).toBe(false)
+    expect(hasPermanentStudentId('123456')).toBe(true)
   })
 
   it('rejects an invalid grade and student number', () => {

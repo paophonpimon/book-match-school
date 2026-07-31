@@ -3,7 +3,7 @@ import { ArrowRight, BadgeCheck } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
-import { classNameFromGradeLevel, gradeLevelFromClassName, validateStudentProfile } from '../../utils/profile'
+import { classNameFromGradeLevel, gradeLevelFromClassName, hasPermanentStudentId, validateStudentProfile } from '../../utils/profile'
 
 export function ProfileSetupPage() {
   const { authUser, currentTerm, profile, saveProfile } = useApp()
@@ -23,6 +23,7 @@ export function ProfileSetupPage() {
   const [studentNumber, setStudentNumber] = useState(profile?.studentNumber ?? '')
   const [error, setError] = useState(redirectedError)
   const [saving, setSaving] = useState(false)
+  const studentIdLocked = hasPermanentStudentId(profile?.studentId)
 
   if (!authUser || !currentTerm) return <Navigate to="/welcome" replace />
 
@@ -64,7 +65,7 @@ export function ProfileSetupPage() {
         <h1>ให้เราเรียกคุณว่าอะไรดี?</h1>
         <p>ข้อมูลนี้ใช้สร้างสมาชิกถาวรและบันทึกอันดับการอ่านของคุณ</p>
         <form onSubmit={submit} noValidate>
-          <label>เลขประจำตัวนักเรียน<input required autoFocus={!profile} disabled={Boolean(profile)} inputMode="numeric" autoComplete="off" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="ระบุเลขประจำตัวนักเรียน" maxLength={20} /></label>
+          <label>เลขประจำตัวนักเรียน<input required autoFocus={!studentIdLocked} disabled={studentIdLocked} inputMode="numeric" autoComplete="off" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="ระบุเลขประจำตัวนักเรียน" maxLength={20} /></label>
           <div className="form-row">
             <label>ชื่อ<input required autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="ชื่อจริง" maxLength={60} /></label>
             <label>นามสกุล<input required autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="นามสกุล" maxLength={60} /></label>
@@ -77,7 +78,9 @@ export function ProfileSetupPage() {
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="button button--primary button--wide" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'ไปเลือกอารมณ์'} <ArrowRight /></button>
         </form>
-        <small>บัญชีสมาชิกผูกกับ {authUser.email} และไม่สามารถเปลี่ยนเลขประจำตัวนักเรียนภายหลังได้</small>
+        <small>{studentIdLocked
+          ? `บัญชีสมาชิกผูกกับ ${authUser.email} และไม่สามารถเปลี่ยนเลขประจำตัวนักเรียนภายหลังได้`
+          : `กรอกเลขประจำตัวนักเรียนเพื่อผูกบัญชีเดิมกับ ${authUser.email} อย่างถาวร`}</small>
       </section>
     </main>
   )

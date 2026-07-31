@@ -68,6 +68,10 @@ export function classNameFromGradeLevel(gradeLevel: string) {
   return `ม.${gradeLevel.trim()}`
 }
 
+export function hasPermanentStudentId(studentId: string | undefined) {
+  return Boolean(studentId?.trim())
+}
+
 export function validateStudentProfile(values: StudentProfileFields) {
   const normalized = Object.fromEntries(
     Object.entries(values).map(([key, value]) => [key, value.trim()]),
