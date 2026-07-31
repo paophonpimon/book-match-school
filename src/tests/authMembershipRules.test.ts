@@ -37,6 +37,12 @@ describe('Google student authentication and membership security', () => {
     expect(firebaseService).toContain('await user.getIdToken(true)')
   })
 
+  it('allows a registration transaction to check an unused student ID without exposing other members', () => {
+    expect(rules).toContain('!exists(/databases/$(database)/documents/studentMemberships/$(studentId))')
+    expect(rules).toContain('resource.data.uid == request.auth.uid')
+    expect(rules).toContain('allow list: if isAdmin()')
+  })
+
   it('restricts suspended members from new student activity', () => {
     expect(rules).toContain("get(membershipPath).data.status == 'active'")
     expect(rules).toContain('activeMember(request.resource.data.uid)')

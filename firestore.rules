@@ -139,7 +139,12 @@ service cloud.firestore {
     }
 
     match /studentMemberships/{studentId} {
-      allow get: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      // Registration must be able to read a not-yet-existing reservation in a
+      // transaction. Existing membership data remains private to its owner.
+      allow get: if isAdmin()
+        || (signedIn()
+          && (!exists(/databases/$(database)/documents/studentMemberships/$(studentId))
+            || resource.data.uid == request.auth.uid));
       allow list: if isAdmin();
       allow create: if hasVerifiedEmail()
         && validMembership(studentId)
