@@ -69,8 +69,17 @@ describe('Admin book schema and list utilities', () => {
     expect(adminCategoryOptions).toHaveLength(10)
     expect(adminCategoryOptions[0]).toEqual({ code: '000', name: 'ความรู้ทั่วไป' })
     expect(adminCategoryOptions.at(-1)).toEqual({ code: '900', name: 'ประวัติศาสตร์และภูมิศาสตร์' })
+    expect(adminCategoryOptions.find(({ code }) => code === '800'))
+      .toEqual({ code: '800', name: 'วรรณกรรมและวรรณคดี' })
     expect(new Set(adminCategoryOptions.map(({ code }) => code)).size).toBe(10)
     expect(new Set(adminCategoryOptions.map(({ name }) => name)).size).toBe(10)
+  })
+
+  it('normalizes legacy category 800 names to the current label', () => {
+    expect(normalizeAdminBook({ categoryCode: '800', category: 'วรรณคดี' }).category)
+      .toBe('วรรณกรรมและวรรณคดี')
+    expect(cleanAdminBookInput({ ...book, categoryCode: '800', category: 'วรรณคดี' }).category)
+      .toBe('วรรณกรรมและวรรณคดี')
   })
 
   it('uses NFKC, case and whitespace for duplicate detection', () => {

@@ -12,9 +12,12 @@ import { currentStudentUser, db } from './firebase'
 import { readStored, writeStored } from './storage'
 import { coverFallbackNeeded } from '../utils/userBooks'
 
-const CACHE_KEY = 'book-match-catalog-cache-v2'
+const CACHE_KEY = 'book-match-catalog-cache-v3'
 const CACHE_MS = 12 * 60 * 1000
 const ACCENTS = ['#e8896e', '#6f8d86', '#b8834c', '#e4a347', '#526879', '#77a887']
+const CATEGORY_NAME_OVERRIDES: Record<string, string> = {
+  '800': 'วรรณกรรมและวรรณคดี',
+}
 
 const moodIds: Record<string, string> = {
   'อยากลุ้น': 'thrill',
@@ -124,7 +127,7 @@ export function normalizeBooksApiResponse(payload: unknown): CatalogPayload {
     if (!id || !title) throw new Error(`ข้อมูลหนังสือลำดับที่ ${index + 1} ไม่มี id หรือ title`)
 
     const categoryCode = asText(source.categoryCode)
-    const category = asText(source.category)
+    const category = CATEGORY_NAME_OVERRIDES[categoryCode] ?? asText(source.category)
     const categoryId = categoryIdFor(categoryCode, category, index)
     const moods = splitSemicolonList(source.moods)
     const tags = splitSemicolonList(source.tags)

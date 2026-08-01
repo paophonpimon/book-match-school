@@ -44,7 +44,7 @@ export const adminCategoryOptions = [
   { code: '500', name: 'วิทยาศาสตร์' },
   { code: '600', name: 'เทคโนโลยีและวิทยาการประยุกต์' },
   { code: '700', name: 'ศิลปะและนันทนาการ' },
-  { code: '800', name: 'วรรณคดี' },
+  { code: '800', name: 'วรรณกรรมและวรรณคดี' },
   { code: '900', name: 'ประวัติศาสตร์และภูมิศาสตร์' },
 ] as const
 
@@ -98,12 +98,14 @@ export function splitAdminList(value: unknown) {
 
 export function normalizeAdminBook(value: unknown): AdminBook {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const categoryCode = asText(source.categoryCode || source.category_code || source.categoryId || source.category_id)
+  const category = adminCategoryOptions.find(({ code }) => code === categoryCode)?.name ?? asText(source.category)
   return {
     id: asText(source.id || source.bookId || source.book_id),
     title: asText(source.title),
     author: asText(source.author),
-    categoryCode: asText(source.categoryCode || source.category_code || source.categoryId || source.category_id),
-    category: asText(source.category),
+    categoryCode,
+    category,
     description: asText(source.description),
     coverUrl: asText(source.coverUrl || source.cover_url),
     audioUrl: asText(source.audioUrl || source.audio_url),
@@ -164,11 +166,13 @@ export function normalizeBookIdentity(value: string) {
 }
 
 export function cleanAdminBookInput(book: AdminBookInput): AdminBookInput {
+  const categoryCode = book.categoryCode.trim()
+  const category = adminCategoryOptions.find(({ code }) => code === categoryCode)?.name ?? book.category.trim()
   return {
     title: book.title.trim(),
     author: book.author.trim(),
-    categoryCode: book.categoryCode.trim(),
-    category: book.category.trim(),
+    categoryCode,
+    category,
     description: book.description.trim(),
     coverUrl: book.coverUrl.trim(),
     audioUrl: book.audioUrl.trim(),

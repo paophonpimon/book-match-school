@@ -81,6 +81,15 @@ describe('Google Sheets catalog', () => {
     expect(splitSemicolonList(['หนึ่ง; สอง', 'สาม'])).toEqual(['หนึ่ง', 'สอง', 'สาม'])
   })
 
+  it('uses the current label for Dewey category 800', () => {
+    const catalog = normalizeBooksApiResponse({
+      ok: true,
+      books: [{ id: 'lit-1', title: 'วรรณกรรมทดสอบ', categoryCode: '800', category: 'วรรณคดี', active: true }],
+    })
+    expect(catalog.books[0].category).toBe('วรรณกรรมและวรรณคดี')
+    expect(catalog.categories[0].name).toBe('วรรณกรรมและวรรณคดี')
+  })
+
   it('keeps valid remote cover URLs regardless of host and removes only missing covers', () => {
     const catalog = normalizeBooksApiResponse({
       ok: true,
