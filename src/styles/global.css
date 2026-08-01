@@ -75,21 +75,46 @@ em { font-style: normal; color: var(--coral-dark); }
 .bottom-nav a { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #897970; border-radius: 14px; font-size: .61rem; font-weight: 700; }
 .bottom-nav a.active { color: var(--coral-dark); background: #fff2eb; }
 
-.welcome-page { min-height: 100vh; position: relative; display: grid; place-items: center; padding: 40px 20px; background: radial-gradient(circle at 80% 18%, #f9decf 0 5%, transparent 25%), radial-gradient(circle at 12% 80%, #e7ecce 0 4%, transparent 23%), var(--cream); overflow: hidden; }
+.welcome-page { min-height: 100vh; min-height: 100dvh; position: relative; display: grid; place-items: center; padding: max(26px, env(safe-area-inset-top)) 24px max(22px, env(safe-area-inset-bottom)); background: radial-gradient(circle at 50% 38%, rgba(255,255,255,.94), transparent 42%), linear-gradient(180deg, #fffaf5 0%, #fffdf8 58%, #fbf6ed 100%); overflow: hidden; isolation: isolate; }
 .welcome-page .demo-banner { position: absolute; inset: 0 0 auto; }
-.welcome-card { width: min(100%, 480px); text-align: center; }
-.welcome-art { position: relative; width: 190px; height: 170px; display: grid; place-items: center; margin: 24px auto 8px; }
-.welcome-art::before, .welcome-art::after { content: ''; position: absolute; border-radius: 50%; }
-.welcome-art::before { inset: 8px; background: #f7dfcf; }
-.welcome-art::after { width: 80px; height: 80px; right: 0; bottom: 0; background: #e4ead3; }
-.welcome-art span { z-index: 2; width: 128px; height: 128px; display: grid; place-items: center; color: var(--coral-dark); background: white; border: 1px solid var(--line); border-radius: 44% 56% 54% 46%; transform: rotate(-4deg); box-shadow: var(--shadow); }
-.welcome-art i, .welcome-art b { position: absolute; z-index: 3; color: #d7a841; font-size: 1.6rem; }
-.welcome-art i { top: 4px; right: 24px; }.welcome-art b { left: 2px; bottom: 12px; color: var(--coral); }
-.welcome-card h1 { font: 600 clamp(2.2rem, 11vw, 3.25rem)/1.22 'Pridi', serif; margin-bottom: 12px; }
-.welcome-card h1 em { display: inline-block; }
-.welcome-copy { max-width: 380px; margin: 0 auto 24px; color: var(--muted); line-height: 1.7; }
-.welcome-note { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 14px; color: var(--muted); font-size: .76rem; }
-.welcome-decoration { position: absolute; color: #e6ab8b; font-size: 3.5rem; opacity: .55; }.welcome-decoration--one { top: 15%; left: -15px; }.welcome-decoration--two { right: -5px; bottom: 12%; }
+.welcome-card { position: relative; z-index: 2; width: min(100%, 430px); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.welcome-card > .brand { transform: scale(.86); transform-origin: center; }
+.welcome-art { width: clamp(148px, 42vw, 184px); aspect-ratio: 1; display: grid; place-items: center; margin: clamp(18px, 4.5vh, 36px) auto clamp(10px, 2.2vh, 18px); }
+.welcome-art img { width: 100%; height: 100%; display: block; object-fit: contain; filter: drop-shadow(0 15px 18px rgba(184, 84, 65, .12)); }
+.welcome-heading > p { margin-bottom: 8px; color: #5e4439; font-size: clamp(.76rem, 3.2vw, .9rem); font-weight: 600; }
+.welcome-heading > p span { margin: 0 6px; color: #ed5a42; }
+.welcome-card h1 { margin-bottom: clamp(18px, 3.4vh, 29px); font: 600 clamp(2.05rem, 10vw, 3.15rem)/1.13 'Pridi', serif; letter-spacing: -.035em; }
+.welcome-card h1 em { display: inline-block; color: #d94f3c; }
+.welcome-login-panel { width: 100%; padding: 18px 18px 15px; border: 1px solid rgba(255,255,255,.9); border-radius: 24px; background: rgba(255,255,255,.82); box-shadow: 0 14px 42px rgba(102, 70, 49, .08); backdrop-filter: blur(12px); }
+.welcome-login-icon { width: 42px; height: 42px; display: grid; place-items: center; margin: 0 auto 10px; color: #c75040; border-radius: 50%; background: #f9e7dc; }
+.welcome-login-icon svg { width: 20px; }
+.welcome-copy { margin: 0 auto 14px; color: #65564d; font-size: .76rem; line-height: 1.55; }
+.welcome-google-button { min-height: 52px; border-radius: 12px; background: linear-gradient(135deg, #ed5a46, #de4336); border-color: #da4638; box-shadow: 0 9px 20px rgba(207, 71, 57, .24); font-size: .94rem; }
+.google-mark { width: 28px; height: 28px; display: inline-grid; place-items: center; flex: 0 0 auto; padding: 4px; border-radius: 50%; background: white; box-shadow: 0 2px 7px rgba(75, 47, 35, .13); }
+.google-mark svg { width: 100%; height: 100%; display: block; }
+.welcome-note { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 13px; color: #5e5148; font-size: .67rem; line-height: 1.45; }
+.welcome-note svg { width: 25px; height: 25px; flex: 0 0 auto; color: #768a4f; }
+.welcome-spark { position: absolute; z-index: 0; color: #ef725b; line-height: 1; }.welcome-spark--top-left { top: 18px; left: 18px; color: #f4bdac; font-size: 1.7rem; }.welcome-spark--top-right { top: 53px; right: 14px; font-size: 1.25rem; }.welcome-spark--middle { top: 21%; left: calc(50% - 130px); font-size: 1.05rem; }
+.welcome-botanical { position: absolute; z-index: 0; width: 78px; height: 76px; opacity: .72; transform: rotate(-28deg); }.welcome-botanical::before { content: ''; position: absolute; left: 36px; top: 7px; width: 3px; height: 72px; border-radius: 99px; background: #87905f; transform: rotate(18deg); }.welcome-botanical i { position: absolute; width: 24px; height: 12px; border-radius: 90% 10% 90% 10%; background: #aeb684; }.welcome-botanical i:nth-child(1) { left: 12px; top: 20px; transform: rotate(18deg); }.welcome-botanical i:nth-child(2) { left: 38px; top: 35px; transform: rotate(58deg); }.welcome-botanical i:nth-child(3) { left: 16px; top: 53px; transform: rotate(18deg); }.welcome-botanical--top { top: -22px; right: -19px; transform: rotate(134deg); opacity: .35; }.welcome-botanical--bottom { left: -15px; bottom: -15px; }
+.welcome-flower { position: absolute; right: -2px; bottom: -4px; color: #f3a98f; font-size: 3.7rem; line-height: 1; opacity: .7; transform: rotate(-12deg); }
+
+@media (max-height: 720px) and (max-width: 600px) {
+  .welcome-page { padding-top: 18px; padding-bottom: 14px; }
+  .welcome-card > .brand { transform: scale(.78); }
+  .welcome-art { width: 132px; margin-top: 12px; margin-bottom: 5px; }
+  .welcome-card h1 { margin-bottom: 15px; font-size: 2rem; }
+  .welcome-login-panel { padding: 13px 15px 11px; }
+  .welcome-login-icon { width: 36px; height: 36px; margin-bottom: 7px; }
+  .welcome-copy { margin-bottom: 10px; }
+  .welcome-google-button { min-height: 48px; }
+  .welcome-note { margin-top: 9px; }
+}
+
+@media (min-width: 760px) {
+  .welcome-page { padding: 42px; }
+  .welcome-card { width: min(100%, 460px); }
+  .welcome-login-panel { padding: 22px 24px 18px; }
+}
 
 .form-card { padding: 26px 22px; border: 1px solid var(--line); border-radius: 26px; background: rgba(255, 253, 248, .9); box-shadow: var(--shadow); }
 .form-card > p:not(.eyebrow) { color: var(--muted); line-height: 1.6; }
