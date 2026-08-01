@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const page = readFileSync(resolve(process.cwd(), 'src/features/discovery/DiscoverPage.tsx'), 'utf8')
 const shell = readFileSync(resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf8')
 const css = readFileSync(resolve(process.cwd(), 'src/styles/global.css'), 'utf8')
+const matchCelebration = readFileSync(resolve(process.cwd(), 'src/features/discovery/MatchCelebration.tsx'), 'utf8')
 
 describe('mobile swipe deck regression', () => {
   it('reserves dynamic viewport space above the bottom navigation and safe area', () => {
@@ -55,6 +56,15 @@ describe('mobile swipe deck regression', () => {
   it('prevents an undo race while the preceding Firestore write is syncing', () => {
     expect(page).toContain('!swipeHistory.length || isTransitioning || syncing')
     expect(page).toContain('disabled={isTransitioning || syncing}')
+  })
+
+  it('celebrates only a liked swipe before opening the matched book', () => {
+    expect(page).toContain("if (status === 'liked')")
+    expect(page).toContain('setMatchedBook(current)')
+    expect(page).toContain('MATCH_CELEBRATION_MS')
+    expect(matchCelebration).toContain('<h2><span>เจอ</span>เล่มที่ใช่!</h2>')
+    expect(css).toContain('@keyframes match-celebration-pop')
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)')
   })
 
   it('has a compact layout for short mobile viewports', () => {

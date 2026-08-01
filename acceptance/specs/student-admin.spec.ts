@@ -116,6 +116,19 @@ test.describe.serial('Book Match browser acceptance', () => {
     }
   })
 
+  test('liked swipe shows a Book Match celebration before opening details', async ({ page }) => {
+    await signInStudent(page, 'studentB')
+    await page.goto('/discover')
+    const currentCard = page.locator('.swipe-card:not(.swipe-card--next)')
+    const bookId = await currentCard.getAttribute('data-book-id')
+    if (!bookId) throw new Error('Missing current swipe card book id')
+    await page.getByRole('button', { name: 'ชอบ' }).click()
+    const celebration = page.getByTestId('match-celebration')
+    await expect(celebration).toBeVisible()
+    await expect(celebration).toContainText('เจอเล่มที่ใช่!')
+    await expect(page).toHaveURL(new RegExp(`/books/${bookId}\\?match=1$`))
+  })
+
   test('saved swipe waits for Firestore before undo and removes remote state cleanly', async ({ page }) => {
     await signInStudent(page, 'studentC')
     await page.goto('/discover')

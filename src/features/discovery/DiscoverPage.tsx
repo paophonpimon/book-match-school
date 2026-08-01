@@ -10,6 +10,9 @@ import { moods } from '../../data/demoData'
 import type { SwipeAction } from '../../types'
 import { rankBooks } from '../../utils/bookRanking'
 import { activeLoanForBook, loanAvailability } from '../../utils/loans'
+import { MatchCelebration } from './MatchCelebration'
+
+const MATCH_CELEBRATION_MS = 1_350
 
 export function DiscoverPage() {
   const { books, categories, loans, bookLoanLocks, bookRatings, selectedMoods, selectedCategories, seenBookIds, swipeHistory, syncing, setBookStatus, undoSwipe, resetRound } = useApp()
@@ -24,7 +27,9 @@ export function DiscoverPage() {
   const swipeX = useMotionValue(0)
   const swipeY = useMotionValue(0)
   const transitionBookId = useRef<string | null>(null)
+  const matchTimer = useRef<number | null>(null)
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [matchedBook, setMatchedBook] = useState<ReturnType<typeof rankBooks>[number] | null>(null)
   const noActionScale = useTransform(swipeX, [-170, -24, 0], [1.38, 1.03, 1])
   const likeActionScale = useTransform(swipeX, [0, 24, 170], [1, 1.03, 1.38])
   const saveActionScale = useTransform(swipeY, [-150, -24, 0], [1.38, 1.03, 1])
@@ -43,6 +48,10 @@ export function DiscoverPage() {
     swipeX.set(0)
     swipeY.set(0)
   }, [current?.id, swipeX, swipeY])
+
+  useEffect(() => () => {
+    if (matchTimer.current !== null) window.clearTimeout(matchTimer.current)
+  }, [])
 
   async function decide(status: SwipeAction) {
     if (!current || transitionBookId.current) return
@@ -63,7 +72,10 @@ export function DiscoverPage() {
       swipeX.set(0)
       swipeY.set(0)
       setBookStatus(bookId, status)
-      if (status === 'liked') navigate(`/books/${bookId}?match=1`)
+      if (status === 'liked') {
+        setMatchedBook(current)
+        matchTimer.current = window.setTimeout(() => navigate(`/books/${bookId}?match=1`), MATCH_CELEBRATION_MS)
+      }
     } finally {
       transitionBookId.current = null
       setIsTransitioning(false)
@@ -71,11 +83,11 @@ export function DiscoverPage() {
   }
 
   if (!current) {
-    return <div className="page"><PageHeader title="ปัดหาเล่ม" /><EmptyState title="ปัดครบรอบนี้แล้ว!" detail="เก่งมาก ลองเริ่มรอบใหม่หรือเปลี่ยนอารมณ์เพื่อเจอหนังสืออีกชุด" action={<div className="button-row"><button className="button button--secondary" onClick={resetRound}>เริ่มรอบใหม่</button><button className="button button--primary" onClick={() => navigate('/mood')}>เปลี่ยนอารมณ์</button></div>} /></div>
+    return <><div className="page"><PageHeader title="ปัดหาเล่ม" /><EmptyState title="ปัดครบรอบนี้แล้ว!" detail="เก่งมาก ลองเริ่มรอบใหม่หรือเปลี่ยนอารมณ์เพื่อเจอหนังสืออีกชุด" action={<div className="button-row"><button className="button button--secondary" onClick={resetRound}>เริ่มรอบใหม่</button><button className="button button--primary" onClick={() => navigate('/mood')}>เปลี่ยนอารมณ์</button></div>} /></div>{matchedBook && <MatchCelebration book={matchedBook} />}</>
   }
 
   return (
-    <div className="page discover-page">
+    <><div className="page discover-page">
       <PageHeader title="ปัดหาเล่ม" action={<button className="icon-button" onClick={() => navigate('/categories')} aria-label="ปรับตัวกรอง"><SlidersHorizontal /></button>} />
       <div className="discovery-filter"><span>{moodLabel}</span><span>{selectedCategories.length ? `${selectedCategories.length} หมวด` : 'ทุกหมวด'}</span><button onClick={() => navigate('/mood')}>เปลี่ยน</button></div>
       <div className="swipe-layout">
@@ -108,7 +120,7 @@ export function DiscoverPage() {
         <Action icon={<Bookmark />} label="เก็บไว้ก่อน" tone="save" scale={saveActionScale} feedbackStyle={{ color: saveActionColor, backgroundColor: saveActionBackground, borderColor: saveActionBorder }} onClick={() => void decide('saved')} disabled={isTransitioning || syncing} />
       </div>
       <p className="swipe-hint"><span>ปัดซ้าย = ไม่ใช่</span><span>ปัดขวา = ชอบ</span><span>ปัดขึ้น = เก็บไว้ก่อน</span></p>
-    </div>
+    </div>{matchedBook && <MatchCelebration book={matchedBook} />}</>
   )
 }
 
