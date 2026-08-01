@@ -1,4 +1,4 @@
-# Book Match automated acceptance report
+# Book Match: เล่มที่ใช่ — automated acceptance report
 
 Generated: 1 August 2026 (Asia/Bangkok)
 

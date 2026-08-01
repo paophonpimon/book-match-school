@@ -63,7 +63,6 @@ export const demoReaders: Reader[] = [
 ].map(([uid, displayName, className, readCount, likedCount, eligible, lastReadAt]) => ({ uid: String(uid), displayName: String(displayName), className: String(className), readCount: Number(readCount), likedCount: Number(likedCount), eligible: Boolean(eligible), lastReadAt: String(lastReadAt) }))
 
 export const demoSettings: Settings = {
-  schoolName: 'โรงเรียนตัวอย่างวิทยา', projectName: 'ปัดหาเล่ม', termId: '2569-1', termName: 'ภาคเรียนที่ 1 / 2569',
+  schoolName: 'โรงเรียนตัวอย่างวิทยา', projectName: 'Book Match: เล่มที่ใช่', termId: '2569-1', termName: 'ภาคเรียนที่ 1 / 2569',
   announcement: 'อ่านวันละนิด แล้วมาแบ่งปันเล่มโปรดกัน', reviewMinChars: 20, leaderboardEnabled: true,
 }
-
