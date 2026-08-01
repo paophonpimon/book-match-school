@@ -2,6 +2,7 @@ import { BookOpen, CalendarClock, Library, LoaderCircle, RotateCcw } from 'lucid
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import { EmptyState } from '../../components/EmptyState'
 import { PageHeader } from '../../components/PageHeader'
 import type { Loan, LoanStatus } from '../../types'
@@ -20,6 +21,7 @@ export function LoanListPage() {
   const { loans, userBooks, setBookStatus, cancelLoan, reloadLoans, syncing } = useApp()
   const [tab, setTab] = useState<LoanTab>('pending')
   const [cancellingId, setCancellingId] = useState('')
+  const [cancelConfirmation, setCancelConfirmation] = useState<Loan | null>(null)
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const visible = useMemo(() => loans.filter((loan) => (
@@ -29,7 +31,7 @@ export function LoanListPage() {
   )), [loans, tab])
 
   async function cancel(loan: Loan) {
-    if (!window.confirm(`ยืนยันยกเลิกคำขอยืม “${loan.bookTitle}” ใช่หรือไม่?`)) return
+    setCancelConfirmation(null)
     setCancellingId(loan.id)
     setError('')
     try {
@@ -70,7 +72,7 @@ export function LoanListPage() {
             loan={loan}
             read={userBooks[loan.bookId]?.status === 'read'}
             cancelling={cancellingId === loan.id}
-            onCancel={() => void cancel(loan)}
+            onCancel={() => setCancelConfirmation(loan)}
             onReview={() => {
               if (userBooks[loan.bookId]?.status === 'read') {
                 navigate(`/books/${loan.bookId}#my-review`)
@@ -81,6 +83,17 @@ export function LoanListPage() {
             }}
           />)}
         </div>
+      )}
+      {cancelConfirmation && (
+        <ConfirmationDialog
+          eyebrow="ยกเลิกคำขอยืม"
+          title={`ยกเลิก “${cancelConfirmation.bookTitle}” ใช่ไหม?`}
+          detail="คำขอนี้จะย้ายไปอยู่ในประวัติ และคุณสามารถส่งคำขอยืมหนังสือเล่มนี้ใหม่ได้ภายหลัง"
+          confirmLabel="ยืนยันยกเลิก"
+          cancelLabel="กลับไปก่อน"
+          onConfirm={() => void cancel(cancelConfirmation)}
+          onCancel={() => setCancelConfirmation(null)}
+        />
       )}
     </div>
   )

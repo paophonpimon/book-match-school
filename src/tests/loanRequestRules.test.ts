@@ -6,6 +6,7 @@ import { assertLoanRequestAvailable, planLoanTransition, validateLoanRequestAcce
 const rules = readFileSync(resolve(process.cwd(), 'firestore.rules'), 'utf8')
 const service = readFileSync(resolve(process.cwd(), 'src/services/loans.ts'), 'utf8')
 const detailPage = readFileSync(resolve(process.cwd(), 'src/features/discovery/BookDetailPage.tsx'), 'utf8')
+const loanListPage = readFileSync(resolve(process.cwd(), 'src/features/loans/LoanListPage.tsx'), 'utf8')
 
 function activeContext(overrides: Partial<LoanRequestAccessContext> = {}): LoanRequestAccessContext {
   return {
@@ -97,5 +98,8 @@ describe('pending loan request authorization', () => {
   it('uses an in-app confirmation dialog instead of the browser confirm popup', () => {
     expect(detailPage).toContain('<ConfirmationDialog')
     expect(detailPage).not.toContain('window.confirm')
+    expect(loanListPage).toContain('<ConfirmationDialog')
+    expect(loanListPage).not.toContain('window.confirm')
+    expect(loanListPage).toContain('ยืนยันยกเลิก')
   })
 })

@@ -211,6 +211,21 @@ test.describe.serial('Book Match browser acceptance', () => {
     await requestBook(page, bookIds[0])
   })
 
+  test('student loan cancellation uses the responsive in-app dialog', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await signInStudent(page, 'studentA')
+    await page.goto('/loans')
+    await page.getByRole('button', { name: 'ยกเลิกคำขอ' }).first().click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: /ยกเลิก/ })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'ยืนยันยกเลิก' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'กลับไปก่อน' })).toBeVisible()
+    await expect(dialog).toBeInViewport()
+    await dialog.getByRole('button', { name: 'กลับไปก่อน' }).click()
+    await expect(dialog).toBeHidden()
+  })
+
   test('admin navigation remains usable on desktop and 390px', async ({ page }) => {
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport)
