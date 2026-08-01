@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle, RefreshCw, Search, UsersRound } from 'lucide-react'
 import type { MembershipStatus } from '../../types'
 import { loadAdminStudentMembers, updateMembershipStatusAsAdmin, type AdminStudentMember } from '../../services/adminStudents'
@@ -12,7 +12,12 @@ const statusLabels: Record<MembershipStatus, string> = {
   transferred: 'ย้ายสถานศึกษา',
 }
 
-export function AdminStudentMembers() {
+interface AdminStudentMembersProps {
+  refreshVersion?: number
+  onRefreshComplete?: () => void
+}
+
+export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: AdminStudentMembersProps) {
   const [members, setMembers] = useState<AdminStudentMember[]>([])
   const [search, setSearch] = useState('')
   const [classroom, setClassroom] = useState('')
@@ -21,6 +26,7 @@ export function AdminStudentMembers() {
   const [loading, setLoading] = useState(true)
   const [mutatingId, setMutatingId] = useState('')
   const [error, setError] = useState('')
+  const previousRefreshVersion = useRef(refreshVersion)
 
   async function load() {
     setLoading(true)
@@ -35,6 +41,12 @@ export function AdminStudentMembers() {
   }
 
   useEffect(() => { void load() }, [])
+
+  useEffect(() => {
+    if (refreshVersion === previousRefreshVersion.current) return
+    previousRefreshVersion.current = refreshVersion
+    void load().finally(() => onRefreshComplete?.())
+  }, [refreshVersion, onRefreshComplete])
 
   const classrooms = useMemo(
     () => [...new Set(members.map((member) => member.className).filter(Boolean))].sort(),

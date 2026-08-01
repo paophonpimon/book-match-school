@@ -101,7 +101,10 @@ describe('loan Firestore security boundary', () => {
 
   it('uses an in-page responsive confirmation flow and mobile Admin navigation', () => {
     expect(adminPage).toContain('className="admin-mobile-nav"')
+    expect(adminPage).toContain('refreshCurrentSection')
+    expect(adminPage).toContain('refreshVersion={sectionRefreshVersions.loans}')
     expect(adminLoans).toContain('className="admin-loan-dialog"')
+    expect(adminLoans).toContain('previousRefreshVersion')
     expect(adminLoans).not.toContain('window.prompt')
     expect(adminLoans).not.toContain('window.confirm')
   })

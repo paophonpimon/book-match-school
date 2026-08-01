@@ -13,7 +13,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   approveLoanAsAdmin,
   loadAdminLoans,
@@ -52,7 +52,12 @@ interface AdminLoanDialogState {
   note: string
 }
 
-export function AdminLoanManagement() {
+interface AdminLoanManagementProps {
+  refreshVersion?: number
+  onRefreshComplete?: () => void
+}
+
+export function AdminLoanManagement({ refreshVersion = 0, onRefreshComplete }: AdminLoanManagementProps) {
   const [loans, setLoans] = useState<Loan[]>([])
   const [bucket, setBucket] = useState<AdminLoanBucket>('pending')
   const [search, setSearch] = useState('')
@@ -63,6 +68,7 @@ export function AdminLoanManagement() {
   const [dialog, setDialog] = useState<AdminLoanDialogState | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const previousRefreshVersion = useRef(refreshVersion)
 
   async function load(showLoading = false) {
     if (showLoading) setLoading(true)
@@ -81,6 +87,12 @@ export function AdminLoanManagement() {
   useEffect(() => {
     void load(true)
   }, [])
+
+  useEffect(() => {
+    if (refreshVersion === previousRefreshVersion.current) return
+    previousRefreshVersion.current = refreshVersion
+    void load(false).finally(() => onRefreshComplete?.())
+  }, [refreshVersion, onRefreshComplete])
 
   const classrooms = useMemo(
     () => [...new Set(loans.map((loan) => loan.studentClassroom).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th')),

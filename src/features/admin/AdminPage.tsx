@@ -44,6 +44,7 @@ import { AdminTermManagement } from './AdminTermManagement'
 
 type FormState = { mode: 'create' } | { mode: 'edit'; book: AdminBook } | null
 type AdminSection = 'dashboard' | 'books' | 'hidden' | 'loans' | 'members' | 'terms'
+type RefreshableAdminSection = Extract<AdminSection, 'loans' | 'members' | 'terms'>
 
 const emptyStats: AdminBookStats = {
   total: 0,
@@ -65,6 +66,12 @@ export function AdminPage() {
   const [stats, setStats] = useState<AdminBookStats>(emptyStats)
   const [loadingBooks, setLoadingBooks] = useState(false)
   const [refreshingBooks, setRefreshingBooks] = useState(false)
+  const [refreshingSection, setRefreshingSection] = useState(false)
+  const [sectionRefreshVersions, setSectionRefreshVersions] = useState<Record<RefreshableAdminSection, number>>({
+    loans: 0,
+    members: 0,
+    terms: 0,
+  })
   const [booksError, setBooksError] = useState('')
   const [message, setMessage] = useState('')
   const [formState, setFormState] = useState<FormState>(null)
@@ -104,6 +111,20 @@ export function AdminPage() {
       setRefreshingBooks(false)
     }
   }, [])
+
+  const finishSectionRefresh = useCallback(() => setRefreshingSection(false), [])
+
+  async function refreshCurrentSection() {
+    if (activeSection === 'loans' || activeSection === 'members' || activeSection === 'terms') {
+      setRefreshingSection(true)
+      setSectionRefreshVersions((current) => ({
+        ...current,
+        [activeSection]: current[activeSection] + 1,
+      }))
+      return
+    }
+    await loadBooks(false, false)
+  }
 
   useEffect(() => subscribeAdminUser((user, unauthorized) => {
     if (unauthorized) {
@@ -308,8 +329,8 @@ export function AdminPage() {
             <p>{adminUser.email}</p>
           </div>
           <div>
-            <button className="button button--secondary" onClick={() => void loadBooks(false, false)} disabled={refreshingBooks}>
-              <RefreshCw className={refreshingBooks ? 'spin' : ''} /> รีเฟรช
+            <button className="button button--secondary" onClick={() => void refreshCurrentSection()} disabled={refreshingBooks || refreshingSection}>
+              <RefreshCw className={refreshingBooks || refreshingSection ? 'spin' : ''} /> รีเฟรช
             </button>
             <button className="button button--primary" onClick={() => { setFormState({ mode: 'create' }); setMessage(''); setActiveSection('dashboard') }}>
               <BookPlus /> เพิ่มหนังสือ
@@ -321,9 +342,9 @@ export function AdminPage() {
         {booksError && <p className="form-error admin-notice" role="alert">{booksError} <button className="text-button" onClick={() => void loadBooks(books.length === 0, false)}>ลองอีกครั้ง</button></p>}
         {message && <p className="admin-success admin-notice" role="status"><BookCheck /> {message}</p>}
 
-        {activeSection === 'loans' && <AdminLoanManagement />}
-        {activeSection === 'members' && <AdminStudentMembers />}
-        {activeSection === 'terms' && <AdminTermManagement />}
+        {activeSection === 'loans' && <AdminLoanManagement refreshVersion={sectionRefreshVersions.loans} onRefreshComplete={finishSectionRefresh} />}
+        {activeSection === 'members' && <AdminStudentMembers refreshVersion={sectionRefreshVersions.members} onRefreshComplete={finishSectionRefresh} />}
+        {activeSection === 'terms' && <AdminTermManagement refreshVersion={sectionRefreshVersions.terms} onRefreshComplete={finishSectionRefresh} />}
 
         {!['loans', 'members', 'terms'].includes(activeSection) && <>
         <section className="admin-stats">

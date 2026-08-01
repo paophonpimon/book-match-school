@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   BarChart3,
   CalendarDays,
@@ -34,7 +34,12 @@ const loanLabels: Record<LoanStatus, string> = {
   cancelled: 'ยกเลิก',
 }
 
-export function AdminTermManagement() {
+interface AdminTermManagementProps {
+  refreshVersion?: number
+  onRefreshComplete?: () => void
+}
+
+export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: AdminTermManagementProps) {
   const [terms, setTerms] = useState<AcademicTerm[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState('')
@@ -42,6 +47,7 @@ export function AdminTermManagement() {
   const [message, setMessage] = useState('')
   const [report, setReport] = useState<TermReport | null>(null)
   const [reportLoadingId, setReportLoadingId] = useState('')
+  const previousRefreshVersion = useRef(refreshVersion)
   const [form, setForm] = useState({
     id: '',
     name: '',
@@ -64,6 +70,12 @@ export function AdminTermManagement() {
   }
 
   useEffect(() => { void load() }, [])
+
+  useEffect(() => {
+    if (refreshVersion === previousRefreshVersion.current) return
+    previousRefreshVersion.current = refreshVersion
+    void load().finally(() => onRefreshComplete?.())
+  }, [refreshVersion, onRefreshComplete])
 
   async function create(event: FormEvent) {
     event.preventDefault()

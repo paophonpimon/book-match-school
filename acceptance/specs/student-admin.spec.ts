@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from 'firebase/firestore'
 import { expect, test, type Page } from '@playwright/test'
 import { ACCEPTANCE_PROJECT_ID, TERM_ID, accounts, bookIds } from '../fixtures'
 import { adminTransition, readManifest, signInAdmin, signInStudent, type FixtureManifest } from '../helpers'
@@ -224,6 +224,32 @@ test.describe.serial('Book Match browser acceptance', () => {
     await expect(dialog).toBeInViewport()
     await dialog.getByRole('button', { name: 'กลับไปก่อน' }).click()
     await expect(dialog).toBeHidden()
+  })
+
+  test('top Admin refresh reloads the currently visible loan data', async ({ page }) => {
+    const refreshedLoanId = 'E2E-ADMIN-REFRESH-LOAN'
+    const refreshedTitle = 'รายการรีเฟรช TEST'
+    await signInAdmin(page)
+    await page.locator('.admin-sidebar').getByRole('link', { name: 'ระบบยืม–คืน' }).click()
+    await expect(page.getByRole('heading', { name: 'จัดการคำขอยืมและการคืนหนังสือ' })).toBeVisible()
+    await expect(page.getByText(refreshedTitle)).toHaveCount(0)
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      const sourceLoans = await getDocs(query(collection(db, 'loans'), where('status', '==', 'pending')))
+      const source = sourceLoans.docs[0]
+      if (!source) throw new Error('Missing pending E2E loan fixture')
+      const now = Timestamp.now()
+      await setDoc(doc(db, 'loans', refreshedLoanId), {
+        ...source.data(),
+        id: refreshedLoanId,
+        bookTitle: refreshedTitle,
+        requestedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+    })
+    await page.locator('.admin-header').getByRole('button', { name: 'รีเฟรช' }).click()
+    await expect(page.getByText(refreshedTitle)).toBeVisible()
   })
 
   test('admin navigation remains usable on desktop and 390px', async ({ page }) => {
