@@ -17,4 +17,10 @@ describe('welcome page visual structure', () => {
     expect(styles).toContain('@media (max-height: 720px) and (max-width: 600px)')
     expect(styles).toContain('env(safe-area-inset-bottom)')
   })
+
+  it('keeps the brand and supplied artwork visually prominent', () => {
+    expect(styles).toContain('.welcome-card > .brand { transform: scale(1.03)')
+    expect(styles).toContain('width: clamp(178px, 49vw, 218px)')
+    expect(styles).toContain('.welcome-art { width: 164px')
+  })
 })

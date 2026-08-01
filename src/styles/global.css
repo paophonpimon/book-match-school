@@ -78,8 +78,8 @@ em { font-style: normal; color: var(--coral-dark); }
 .welcome-page { min-height: 100vh; min-height: 100dvh; position: relative; display: grid; place-items: center; padding: max(26px, env(safe-area-inset-top)) 24px max(22px, env(safe-area-inset-bottom)); background: radial-gradient(circle at 50% 38%, rgba(255,255,255,.94), transparent 42%), linear-gradient(180deg, #fffaf5 0%, #fffdf8 58%, #fbf6ed 100%); overflow: hidden; isolation: isolate; }
 .welcome-page .demo-banner { position: absolute; inset: 0 0 auto; }
 .welcome-card { position: relative; z-index: 2; width: min(100%, 430px); display: flex; flex-direction: column; align-items: center; text-align: center; }
-.welcome-card > .brand { transform: scale(.86); transform-origin: center; }
-.welcome-art { width: clamp(148px, 42vw, 184px); aspect-ratio: 1; display: grid; place-items: center; margin: clamp(18px, 4.5vh, 36px) auto clamp(10px, 2.2vh, 18px); }
+.welcome-card > .brand { transform: scale(1.03); transform-origin: center; }
+.welcome-art { width: clamp(178px, 49vw, 218px); aspect-ratio: 1; display: grid; place-items: center; margin: clamp(17px, 3.8vh, 30px) auto clamp(8px, 1.7vh, 14px); }
 .welcome-art img { width: 100%; height: 100%; display: block; object-fit: contain; filter: drop-shadow(0 15px 18px rgba(184, 84, 65, .12)); }
 .welcome-heading > p { margin-bottom: 8px; color: #5e4439; font-size: clamp(.76rem, 3.2vw, .9rem); font-weight: 600; }
 .welcome-heading > p span { margin: 0 6px; color: #ed5a42; }
@@ -100,8 +100,8 @@ em { font-style: normal; color: var(--coral-dark); }
 
 @media (max-height: 720px) and (max-width: 600px) {
   .welcome-page { padding-top: 18px; padding-bottom: 14px; }
-  .welcome-card > .brand { transform: scale(.78); }
-  .welcome-art { width: 132px; margin-top: 12px; margin-bottom: 5px; }
+  .welcome-card > .brand { transform: scale(.94); }
+  .welcome-art { width: 164px; margin-top: 9px; margin-bottom: 3px; }
   .welcome-card h1 { margin-bottom: 15px; font-size: 2rem; }
   .welcome-login-panel { padding: 13px 15px 11px; }
   .welcome-login-icon { width: 36px; height: 36px; margin-bottom: 7px; }
