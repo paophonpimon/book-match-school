@@ -48,6 +48,13 @@ describe('mobile swipe deck regression', () => {
     expect(page).toContain('className="swipe-card__rating"')
     expect(page).toContain('★ {rating.ratingAverage.toFixed(1)}')
     expect(css).toContain('.swipe-card__rating')
+    expect(page).toContain('className="swipe-card__title-line"')
+    expect(css).toContain('font-size: var(--swipe-title-size)')
+  })
+
+  it('prevents an undo race while the preceding Firestore write is syncing', () => {
+    expect(page).toContain('!swipeHistory.length || isTransitioning || syncing')
+    expect(page).toContain('disabled={isTransitioning || syncing}')
   })
 
   it('has a compact layout for short mobile viewports', () => {

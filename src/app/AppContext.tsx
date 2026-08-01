@@ -436,8 +436,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? saveLikedBookRemote(restoredBook, profile)
         : restoredBook.status === 'saved'
           ? saveSavedBookRemote(restoredBook)
-          : saveUserBookRemote(restoredBook, profile)
+        : saveUserBookRemote(restoredBook, profile)
     setSyncing(true)
+    setSyncError(null)
     void request.catch((error) => setSyncError(firebaseErrorMessage(error, 'ย้อนการปัดใน Firestore ไม่สำเร็จ')))
       .finally(() => setSyncing(false))
   }

@@ -55,6 +55,35 @@ async function cancelRequest(account: keyof typeof accounts, bookId: string, loa
   await batch.commit()
 }
 
+async function likeThenUndo(account: keyof typeof accounts, bookId: string) {
+  const user = manifest.users[account]
+  const db = environment.authenticatedContext(user.uid, { email: user.email, email_verified: true }).firestore()
+  const userBookRef = doc(db, 'userBooks', `${TERM_ID}_${user.uid}_${bookId}`)
+  const progressRef = doc(db, 'progress', `${TERM_ID}_${user.uid}`)
+  const statsRef = doc(db, 'bookStats', `${TERM_ID}_${bookId}`)
+  const like = writeBatch(db)
+  like.set(userBookRef, {
+    uid: user.uid, termId: TERM_ID, bookId, loanId: null, status: 'liked', rating: null, review: null,
+    moodAfterReading: null, favoriteAspect: null, likedAt: serverTimestamp(), startedAt: null, readAt: null,
+    updatedAt: serverTimestamp(), lifetimeReadCredited: false, lifetimeCreditedAt: null,
+  })
+  like.update(progressRef, { likedCount: 1, updatedAt: serverTimestamp() })
+  like.set(statsRef, {
+    termId: TERM_ID, bookId, likeCount: 1, saveCount: 0, readingCount: 0, readCount: 0,
+    ratingTotal: 0, ratingCount: 0, lastUpdatedBy: user.uid, updatedAt: serverTimestamp(),
+  })
+  await like.commit()
+
+  const undo = writeBatch(db)
+  undo.delete(userBookRef)
+  undo.update(progressRef, { likedCount: 0, updatedAt: serverTimestamp() })
+  undo.set(statsRef, {
+    termId: TERM_ID, bookId, likeCount: 0, saveCount: 0, readingCount: 0, readCount: 0,
+    ratingTotal: 0, ratingCount: 0, lastUpdatedBy: user.uid, updatedAt: serverTimestamp(),
+  })
+  await undo.commit()
+}
+
 test.describe.serial('Firestore Rules acceptance', () => {
   test.beforeAll(async () => {
     manifest = await readManifest()
@@ -89,6 +118,17 @@ test.describe.serial('Firestore Rules acceptance', () => {
       expect((await getDoc(doc(context.firestore(), 'loanAuditLogs', auditId))).data()?.action).toBe('cancel')
     })
     await assertSucceeds(createRequest('studentA', bookId, 'E2E-RULE-REREQUEST-A'))
+  })
+
+  test('student can undo the first liked swipe atomically', async () => {
+    const bookId = bookIds[5]
+    await assertSucceeds(likeThenUndo('studentB', bookId))
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      expect((await getDoc(doc(db, 'userBooks', `${TERM_ID}_${manifest.users.studentB.uid}_${bookId}`))).exists()).toBe(false)
+      expect((await getDoc(doc(db, 'progress', `${TERM_ID}_${manifest.users.studentB.uid}`))).data()?.likedCount).toBe(0)
+      expect((await getDoc(doc(db, 'bookStats', `${TERM_ID}_${bookId}`))).data()?.likeCount).toBe(0)
+    })
   })
 
   test('missing membership and suspended member are denied', async () => {

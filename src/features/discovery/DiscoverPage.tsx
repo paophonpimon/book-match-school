@@ -12,7 +12,7 @@ import { rankBooks } from '../../utils/bookRanking'
 import { activeLoanForBook, loanAvailability } from '../../utils/loans'
 
 export function DiscoverPage() {
-  const { books, categories, loans, bookLoanLocks, bookRatings, selectedMoods, selectedCategories, seenBookIds, swipeHistory, setBookStatus, undoSwipe, resetRound } = useApp()
+  const { books, categories, loans, bookLoanLocks, bookRatings, selectedMoods, selectedCategories, seenBookIds, swipeHistory, syncing, setBookStatus, undoSwipe, resetRound } = useApp()
   const navigate = useNavigate()
   const seed = sessionStorage.getItem('book-match-seed') ?? crypto.randomUUID()
   sessionStorage.setItem('book-match-seed', seed)
@@ -90,22 +90,22 @@ export function DiscoverPage() {
                   {nextBook.featured && <span>แนะนำ</span>}
                   <span className={`loan-badge loan-badge--${loanAvailability(activeLoanForBook(loans, nextBook.id), bookLoanLocks[nextBook.id]).tone}`}>{loanAvailability(activeLoanForBook(loans, nextBook.id), bookLoanLocks[nextBook.id]).label}</span>
                 </div>
-                <h2>{nextBook.title}</h2>
-                <div className="swipe-card__byline"><p>{nextBook.author}</p><BookRating rating={bookRatings[nextBook.id]} /></div>
+                <div className="swipe-card__title-line"><BookRating rating={bookRatings[nextBook.id]} /><h2>{nextBook.title}</h2></div>
+                <p>{nextBook.author}</p>
                 <small>{nextBook.description}</small>
               </div>
             </article>
           )}
-          <SwipeCard key={current.id} book={current} category={categories.find((item) => item.id === current.categoryId)?.name ?? current.categoryId} availability={currentAvailability!} rating={bookRatings[current.id]} x={swipeX} y={swipeY} disabled={isTransitioning} onDecision={decide} />
+          <SwipeCard key={current.id} book={current} category={categories.find((item) => item.id === current.categoryId)?.name ?? current.categoryId} availability={currentAvailability!} rating={bookRatings[current.id]} x={swipeX} y={swipeY} disabled={isTransitioning || syncing} onDecision={decide} />
           {ranked.slice(1, 3).map((book) => <link key={book.id} rel="preload" as="image" href={book.coverUrl} />)}
         </section>
         <aside className="swipe-aside swipe-aside--right"><span className="shelf-badge">{current.shelfCode}</span><h3>{current.title}</h3><p>{current.description}</p><button className="text-button" onClick={() => navigate(`/books/${current.id}`)}>ดูรายละเอียดก่อนเลือก</button></aside>
       </div>
       <div className="swipe-actions" aria-label="ตัวเลือกการปัด">
-        <Action icon={<RotateCcw />} label="ย้อนกลับ" tone="undo" onClick={undoSwipe} disabled={!swipeHistory.length || isTransitioning} />
-        <Action icon={<X />} label="ไม่ใช่" tone="no" scale={noActionScale} feedbackStyle={{ color: noActionColor, backgroundColor: noActionBackground, borderColor: noActionBorder }} onClick={() => void decide('skipped')} disabled={isTransitioning} />
-        <Action icon={<Heart />} label="ชอบ" tone="like" scale={likeActionScale} feedbackStyle={{ color: likeActionColor, backgroundColor: likeActionBackground, borderColor: likeActionBorder }} onClick={() => void decide('liked')} disabled={isTransitioning} />
-        <Action icon={<Bookmark />} label="เก็บไว้ก่อน" tone="save" scale={saveActionScale} feedbackStyle={{ color: saveActionColor, backgroundColor: saveActionBackground, borderColor: saveActionBorder }} onClick={() => void decide('saved')} disabled={isTransitioning} />
+        <Action icon={<RotateCcw />} label="ย้อนกลับ" tone="undo" onClick={undoSwipe} disabled={!swipeHistory.length || isTransitioning || syncing} />
+        <Action icon={<X />} label="ไม่ใช่" tone="no" scale={noActionScale} feedbackStyle={{ color: noActionColor, backgroundColor: noActionBackground, borderColor: noActionBorder }} onClick={() => void decide('skipped')} disabled={isTransitioning || syncing} />
+        <Action icon={<Heart />} label="ชอบ" tone="like" scale={likeActionScale} feedbackStyle={{ color: likeActionColor, backgroundColor: likeActionBackground, borderColor: likeActionBorder }} onClick={() => void decide('liked')} disabled={isTransitioning || syncing} />
+        <Action icon={<Bookmark />} label="เก็บไว้ก่อน" tone="save" scale={saveActionScale} feedbackStyle={{ color: saveActionColor, backgroundColor: saveActionBackground, borderColor: saveActionBorder }} onClick={() => void decide('saved')} disabled={isTransitioning || syncing} />
       </div>
       <p className="swipe-hint"><span>ปัดซ้าย = ไม่ใช่</span><span>ปัดขวา = ชอบ</span><span>ปัดขึ้น = เก็บไว้ก่อน</span></p>
     </div>
@@ -153,7 +153,7 @@ function SwipeCard({ book, category, availability, rating, x, y, disabled, onDec
       </motion.span>
       <motion.span className="swipe-stamp swipe-stamp--save" style={{ opacity: saveOpacity }}>เก็บไว้</motion.span>
       <BookCover book={book} loading="eager" />
-      <div className="swipe-card__info"><div className="badge-row"><span>{category}</span>{book.featured && <span>แนะนำ</span>}<span className={`loan-badge loan-badge--${availability.tone}`}>{availability.label}</span></div><h2>{book.title}</h2><div className="swipe-card__byline"><p>{book.author}</p><BookRating rating={rating} /></div><small>{book.description}</small></div>
+      <div className="swipe-card__info"><div className="badge-row"><span>{category}</span>{book.featured && <span>แนะนำ</span>}<span className={`loan-badge loan-badge--${availability.tone}`}>{availability.label}</span></div><div className="swipe-card__title-line"><BookRating rating={rating} /><h2>{book.title}</h2></div><p>{book.author}</p><small>{book.description}</small></div>
     </motion.article>
   )
 }

@@ -116,6 +116,25 @@ test.describe.serial('Book Match browser acceptance', () => {
     }
   })
 
+  test('saved swipe waits for Firestore before undo and removes remote state cleanly', async ({ page }) => {
+    await signInStudent(page, 'studentC')
+    await page.goto('/discover')
+    const bookId = await page.locator('.swipe-card:not(.swipe-card--next)').getAttribute('data-book-id')
+    if (!bookId) throw new Error('Missing current swipe card book id')
+    const undo = page.getByRole('button', { name: 'ย้อนกลับ' })
+    await page.getByRole('button', { name: 'เก็บไว้ก่อน' }).click()
+    await expect(undo).toBeEnabled()
+    await undo.click()
+    await expect.poll(async () => {
+      let exists = true
+      await environment.withSecurityRulesDisabled(async (context) => {
+        exists = (await getDoc(doc(context.firestore(), 'userBooks', `${TERM_ID}_${manifest.users.studentC.uid}_${bookId}`))).exists()
+      })
+      return exists
+    }).toBe(false)
+    await expect(page.getByText(/ย้อนการปัดใน Firestore ไม่สำเร็จ/)).toHaveCount(0)
+  })
+
   test('five left swipes keep deck geometry stable and undo restores the preceding book', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await signInStudent(page, 'studentA')
