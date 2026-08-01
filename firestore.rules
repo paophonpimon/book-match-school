@@ -759,15 +759,15 @@ service cloud.firestore {
     }
 
     function validStudentLoanCancel() {
-      let keyPath = /databases/$(database)/documents/studentLoanActiveKeys/$(request.auth.uid + '_' + resource.data.bookId);
       return owns(resource.data.uid)
         && resource.data.status == 'pending'
         && request.resource.data.status == 'cancelled'
         && request.resource.data.cancelledAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && shortText(request.resource.data.lastAuditId, 1, 128)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status', 'cancelledAt', 'updatedAt', 'lastAuditId'
-        ])
-        && !existsAfter(keyPath);
+        ]);
     }
 
     function validLoanAuditLink(loanId) {
@@ -845,11 +845,8 @@ service cloud.firestore {
       // through each companion document's own rule. Avoid a circular loan -> audit
       // getAfter() check here, which causes valid atomic approval commits to be denied.
       allow update: if validAdminLoanUpdate(loanId)
-        || (validLoanSchema(loanId)
-          && validLoanStatusShape()
-          && loanImmutableFieldsValid()
-          && validLoanAuditLink(loanId)
-          && validStudentLoanCancel());
+        || (validStudentLoanCancel()
+          && validLoanAuditLink(loanId));
       allow delete: if false;
     }
 
@@ -879,6 +876,9 @@ service cloud.firestore {
     function validActiveKeyDelete() {
       let loanPath = /databases/$(database)/documents/loans/$(resource.data.loanId);
       let loan = getAfter(loanPath).data;
+      // Validate cancellation in one direction (active key -> updated loan).
+      // A reverse loan -> deleted key lookup creates a circular rules evaluation
+      // and valid atomic student cancellations exceed the expression limit.
       return existsAfter(loanPath)
         && loan.uid == resource.data.uid
         && loan.bookId == resource.data.bookId

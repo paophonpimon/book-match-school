@@ -40,6 +40,21 @@ async function createRequest(account: keyof typeof accounts, bookId: string, loa
   await batch.commit()
 }
 
+async function cancelRequest(account: keyof typeof accounts, bookId: string, loanId: string, auditId: string) {
+  const user = manifest.users[account]
+  const db = environment.authenticatedContext(user.uid, { email: user.email, email_verified: true }).firestore()
+  const batch = writeBatch(db)
+  batch.update(doc(db, 'loans', loanId), {
+    status: 'cancelled', cancelledAt: serverTimestamp(), updatedAt: serverTimestamp(), lastAuditId: auditId,
+  })
+  batch.delete(doc(db, 'studentLoanActiveKeys', `${user.uid}_${bookId}`))
+  batch.set(doc(db, 'loanAuditLogs', auditId), {
+    action: 'cancel', loanId, bookId, studentUid: user.uid, previousStatus: 'pending', nextStatus: 'cancelled',
+    actorUid: user.uid, actorEmail: null, note: '', createdAt: serverTimestamp(),
+  })
+  await batch.commit()
+}
+
 test.describe.serial('Firestore Rules acceptance', () => {
   test.beforeAll(async () => {
     manifest = await readManifest()
@@ -61,6 +76,19 @@ test.describe.serial('Firestore Rules acceptance', () => {
       expect((await getDoc(doc(context.firestore(), 'bookLoanLocks', bookIds[6]))).exists()).toBe(false)
     })
     void inspector
+  })
+
+  test('student cancels a pending loan and removes its active key atomically', async () => {
+    const loanId = 'E2E-RULE-REQUEST-A'
+    const auditId = 'E2E-RULE-CANCEL-A'
+    const bookId = bookIds[6]
+    await assertSucceeds(cancelRequest('studentA', bookId, loanId, auditId))
+    await environment.withSecurityRulesDisabled(async (context) => {
+      expect((await getDoc(doc(context.firestore(), 'loans', loanId))).data()?.status).toBe('cancelled')
+      expect((await getDoc(doc(context.firestore(), 'studentLoanActiveKeys', `${manifest.users.studentA.uid}_${bookId}`))).exists()).toBe(false)
+      expect((await getDoc(doc(context.firestore(), 'loanAuditLogs', auditId))).data()?.action).toBe('cancel')
+    })
+    await assertSucceeds(createRequest('studentA', bookId, 'E2E-RULE-REREQUEST-A'))
   })
 
   test('missing membership and suspended member are denied', async () => {

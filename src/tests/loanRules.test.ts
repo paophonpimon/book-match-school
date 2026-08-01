@@ -21,6 +21,11 @@ describe('loan Firestore security boundary', () => {
   it('allows student cancellation only from pending', () => {
     expect(rules).toContain("resource.data.status == 'pending'")
     expect(rules).toContain("request.resource.data.status == 'cancelled'")
+    const cancelBlock = rules.slice(rules.indexOf('function validStudentLoanCancel'), rules.indexOf('function validLoanAuditLink'))
+    const keyDeleteBlock = rules.slice(rules.indexOf('function validActiveKeyDelete'), rules.indexOf('match /studentLoanActiveKeys'))
+    expect(cancelBlock).not.toContain('existsAfter(keyPath)')
+    expect(keyDeleteBlock).toContain('getAfter(loanPath)')
+    expect(keyDeleteBlock).toContain("loan.status == 'cancelled'")
   })
 
   it('does not allow general users to write book loan locks', () => {
