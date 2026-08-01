@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from 'firebase/firestore'
 import { expect, test, type Page } from '@playwright/test'
 import { ACCEPTANCE_PROJECT_ID, TERM_ID, accounts, bookIds } from '../fixtures'
 import { adminTransition, readManifest, signInAdmin, signInStudent, type FixtureManifest } from '../helpers'
@@ -85,6 +85,36 @@ test.describe.serial('Book Match browser acceptance', () => {
       await assertNoHorizontalOverflow(page)
     })
   }
+
+  test('swipe card shows aggregate stars without loading review text', async ({ page }) => {
+    await signInStudent(page, 'studentB')
+    await page.goto('/discover')
+    const card = page.locator('.swipe-card:not(.swipe-card--next)')
+    const bookId = await card.getAttribute('data-book-id')
+    if (!bookId) throw new Error('Missing current swipe card book id')
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'bookStats', `${TERM_ID}_${bookId}`), {
+        termId: TERM_ID,
+        bookId,
+        likeCount: 0,
+        saveCount: 0,
+        readingCount: 0,
+        readCount: 2,
+        ratingTotal: 9,
+        ratingCount: 2,
+        lastUpdatedBy: manifest.users.studentB.uid,
+        updatedAt: Timestamp.now(),
+      })
+    })
+    try {
+      await page.reload()
+      await expect(page.locator(`.swipe-card[data-book-id="${bookId}"] .swipe-card__rating`)).toHaveText('★ 4.5')
+    } finally {
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await deleteDoc(doc(context.firestore(), 'bookStats', `${TERM_ID}_${bookId}`))
+      })
+    }
+  })
 
   test('five left swipes keep deck geometry stable and undo restores the preceding book', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })

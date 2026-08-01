@@ -116,6 +116,11 @@ export interface BookReview {
   createdAt: string
 }
 
+export interface BookRatingSummary {
+  ratingAverage: number
+  ratingCount: number
+}
+
 export interface Reader {
   uid: string
   displayName: string

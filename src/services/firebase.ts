@@ -33,6 +33,7 @@ import {
 } from 'firebase/firestore'
 import type {
   AcademicTerm,
+  BookRatingSummary,
   BookReview,
   BookStatus,
   Profile,
@@ -605,6 +606,22 @@ export interface BookReviewSummary {
   reviews: BookReview[]
   ratingAverage: number
   ratingCount: number
+}
+
+export async function loadBookRatingsRemote(termId: string): Promise<Record<string, BookRatingSummary>> {
+  if (!db || !termId) return {}
+  const snapshot = await getDocs(query(collection(db, 'bookStats'), where('termId', '==', termId)))
+  return Object.fromEntries(snapshot.docs.flatMap((statsSnapshot) => {
+    const data = statsSnapshot.data()
+    const bookId = String(data.bookId ?? '')
+    const ratingCount = Math.max(0, Number(data.ratingCount ?? 0))
+    const ratingTotal = Math.max(0, Number(data.ratingTotal ?? 0))
+    if (!bookId || ratingCount <= 0 || ratingTotal <= 0) return []
+    return [[bookId, {
+      ratingAverage: Math.min(5, ratingTotal / ratingCount),
+      ratingCount,
+    }]]
+  }))
 }
 
 export async function loadBookReviewsRemote(termId: string, bookId: string): Promise<BookReviewSummary> {

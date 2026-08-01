@@ -8,6 +8,7 @@ import {
   currentStudentUser,
   deleteUserBookRemote,
   getFirebaseRuntimeStatus,
+  loadBookRatingsRemote,
   loadCurrentTermRemote,
   loadReadersRemote,
   loadRemoteStudentState,
@@ -27,6 +28,7 @@ import type {
   AcademicTerm,
   Book,
   BookLoanLock,
+  BookRatingSummary,
   Category,
   Loan,
   Profile,
@@ -55,6 +57,7 @@ interface AppState {
   userBooks: Record<string, UserBook>
   loans: Loan[]
   bookLoanLocks: Record<string, BookLoanLock>
+  bookRatings: Record<string, BookRatingSummary>
   selectedMoods: string[]
   selectedCategories: string[]
   seenBookIds: string[]
@@ -121,6 +124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [userBooks, setUserBooks] = useState<Record<string, UserBook>>({})
   const [loans, setLoans] = useState<Loan[]>([])
   const [bookLoanLocks, setBookLoanLocks] = useState<Record<string, BookLoanLock>>({})
+  const [bookRatings, setBookRatings] = useState<Record<string, BookRatingSummary>>({})
   const initialDiscovery = readStored<{ moods?: string[]; mood?: string; selectedCategories: string[] }>(
     DISCOVERY_KEY,
     { moods: [], selectedCategories: [] },
@@ -163,6 +167,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setReaders([])
     setLoans([])
     setBookLoanLocks({})
+    setBookRatings({})
     setCurrentTerm(null)
     setCurrentTermError(null)
     setBooks([])
@@ -183,12 +188,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setCurrentTerm(term)
       setCurrentTermError(null)
-      const [catalog, student, nextReaders, nextLoans, nextLocks] = await Promise.all([
+      const [catalog, student, nextReaders, nextLoans, nextLocks, nextRatings] = await Promise.all([
         loadCatalog(),
         loadRemoteStudentState(user, term.id),
         loadReadersRemote(term.id),
         loadStudentLoans(user.uid),
         loadBookLoanLocks(),
+        loadBookRatingsRemote(term.id).catch(() => ({})),
       ])
       applyCatalog(catalog, term)
       setProfile(student.profile)
@@ -198,6 +204,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReaders(nextReaders)
       setLoans(nextLoans)
       setBookLoanLocks(nextLocks)
+      setBookRatings(nextRatings)
       if (catalog.refresh) {
         void catalog.refresh.then((fresh) => applyCatalog(fresh, term))
       }
@@ -501,6 +508,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setReaderStats(remote.readerStats)
       }
       await refreshReaders()
+      void loadBookRatingsRemote(currentTerm.id).then(setBookRatings).catch(() => {})
     } catch (error) {
       setSyncError(firebaseErrorMessage(error, 'ยืนยันการอ่านใน Firestore ไม่สำเร็จ คะแนนยังไม่ถูกเพิ่ม'))
       throw error
@@ -586,6 +594,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     userBooks,
     loans,
     bookLoanLocks,
+    bookRatings,
     selectedMoods,
     selectedCategories,
     seenBookIds,

@@ -12,7 +12,7 @@ import { rankBooks } from '../../utils/bookRanking'
 import { activeLoanForBook, loanAvailability } from '../../utils/loans'
 
 export function DiscoverPage() {
-  const { books, categories, loans, bookLoanLocks, selectedMoods, selectedCategories, seenBookIds, swipeHistory, setBookStatus, undoSwipe, resetRound } = useApp()
+  const { books, categories, loans, bookLoanLocks, bookRatings, selectedMoods, selectedCategories, seenBookIds, swipeHistory, setBookStatus, undoSwipe, resetRound } = useApp()
   const navigate = useNavigate()
   const seed = sessionStorage.getItem('book-match-seed') ?? crypto.randomUUID()
   sessionStorage.setItem('book-match-seed', seed)
@@ -91,12 +91,12 @@ export function DiscoverPage() {
                   <span className={`loan-badge loan-badge--${loanAvailability(activeLoanForBook(loans, nextBook.id), bookLoanLocks[nextBook.id]).tone}`}>{loanAvailability(activeLoanForBook(loans, nextBook.id), bookLoanLocks[nextBook.id]).label}</span>
                 </div>
                 <h2>{nextBook.title}</h2>
-                <p>{nextBook.author}</p>
+                <div className="swipe-card__byline"><p>{nextBook.author}</p><BookRating rating={bookRatings[nextBook.id]} /></div>
                 <small>{nextBook.description}</small>
               </div>
             </article>
           )}
-          <SwipeCard key={current.id} book={current} category={categories.find((item) => item.id === current.categoryId)?.name ?? current.categoryId} availability={currentAvailability!} x={swipeX} y={swipeY} disabled={isTransitioning} onDecision={decide} />
+          <SwipeCard key={current.id} book={current} category={categories.find((item) => item.id === current.categoryId)?.name ?? current.categoryId} availability={currentAvailability!} rating={bookRatings[current.id]} x={swipeX} y={swipeY} disabled={isTransitioning} onDecision={decide} />
           {ranked.slice(1, 3).map((book) => <link key={book.id} rel="preload" as="image" href={book.coverUrl} />)}
         </section>
         <aside className="swipe-aside swipe-aside--right"><span className="shelf-badge">{current.shelfCode}</span><h3>{current.title}</h3><p>{current.description}</p><button className="text-button" onClick={() => navigate(`/books/${current.id}`)}>ดูรายละเอียดก่อนเลือก</button></aside>
@@ -112,7 +112,7 @@ export function DiscoverPage() {
   )
 }
 
-function SwipeCard({ book, category, availability, x, y, disabled, onDecision }: { book: ReturnType<typeof rankBooks>[number]; category: string; availability: ReturnType<typeof loanAvailability>; x: MotionValue<number>; y: MotionValue<number>; disabled: boolean; onDecision: (status: SwipeAction) => Promise<void> }) {
+function SwipeCard({ book, category, availability, rating, x, y, disabled, onDecision }: { book: ReturnType<typeof rankBooks>[number]; category: string; availability: ReturnType<typeof loanAvailability>; rating?: { ratingAverage: number; ratingCount: number }; x: MotionValue<number>; y: MotionValue<number>; disabled: boolean; onDecision: (status: SwipeAction) => Promise<void> }) {
   const rotate = useTransform(x, [-220, 220], [-10, 10])
   const likeOpacity = useTransform(x, [12, 70, 150], [0, 0.55, 1])
   const likeScale = useTransform(x, [12, 90, 180], [0.55, 1, 1.18])
@@ -153,9 +153,14 @@ function SwipeCard({ book, category, availability, x, y, disabled, onDecision }:
       </motion.span>
       <motion.span className="swipe-stamp swipe-stamp--save" style={{ opacity: saveOpacity }}>เก็บไว้</motion.span>
       <BookCover book={book} loading="eager" />
-      <div className="swipe-card__info"><div className="badge-row"><span>{category}</span>{book.featured && <span>แนะนำ</span>}<span className={`loan-badge loan-badge--${availability.tone}`}>{availability.label}</span></div><h2>{book.title}</h2><p>{book.author}</p><small>{book.description}</small></div>
+      <div className="swipe-card__info"><div className="badge-row"><span>{category}</span>{book.featured && <span>แนะนำ</span>}<span className={`loan-badge loan-badge--${availability.tone}`}>{availability.label}</span></div><h2>{book.title}</h2><div className="swipe-card__byline"><p>{book.author}</p><BookRating rating={rating} /></div><small>{book.description}</small></div>
     </motion.article>
   )
+}
+
+function BookRating({ rating }: { rating?: { ratingAverage: number; ratingCount: number } }) {
+  if (!rating || rating.ratingCount <= 0) return null
+  return <span className="swipe-card__rating" aria-label={`คะแนนเฉลี่ย ${rating.ratingAverage.toFixed(1)} จาก 5 ดาว`}>★ {rating.ratingAverage.toFixed(1)}</span>
 }
 
 function Action({ icon, label, tone, scale, feedbackStyle, onClick, disabled = false }: { icon: React.ReactNode; label: string; tone: string; scale?: MotionValue<number>; feedbackStyle?: MotionStyle; onClick: () => void; disabled?: boolean }) {

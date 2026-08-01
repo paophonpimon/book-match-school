@@ -43,6 +43,13 @@ describe('mobile swipe deck regression', () => {
     expect(page).toContain('ปัดขึ้น = เก็บไว้ก่อน')
   })
 
+  it('shows only the aggregate star score on swipe cards when ratings exist', () => {
+    expect(page).toContain('bookRatings')
+    expect(page).toContain('className="swipe-card__rating"')
+    expect(page).toContain('★ {rating.ratingAverage.toFixed(1)}')
+    expect(css).toContain('.swipe-card__rating')
+  })
+
   it('has a compact layout for short mobile viewports', () => {
     expect(css).toContain('@media (max-width: 699px) and (max-height: 740px)')
     expect(css).toContain('.swipe-action > span { width: 46px; height: 46px; }')
