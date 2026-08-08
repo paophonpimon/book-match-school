@@ -30,6 +30,22 @@ describe('mobile swipe deck regression', () => {
     expect(css).not.toContain('scale(.96) rotate(1.4deg)')
   })
 
+  it('uses the supplied swipe artwork as non-interactive decoration', () => {
+    expect(page).toContain('/swipe-card-floral-frame.png')
+    expect(page).toContain('/swipe-bookmark-heart.png')
+    expect(page).toContain('className="swipe-card__floral-frame"')
+    expect(page).toContain('aria-hidden="true" draggable={false}')
+    expect(css).toContain('.swipe-card__bookmark-art')
+    expect(css).toContain('pointer-events: none')
+  })
+
+  it('shows real filter selections and match reasons only when present', () => {
+    expect(page).toContain('selectedMoodOptions.map')
+    expect(page).toContain('selectedCategories.length')
+    expect(page).toContain('book.matchReason &&')
+    expect(page).toContain('{book.matchReason}')
+  })
+
   it('uses the same guarded decision animation for buttons and gestures', () => {
     expect(page).toContain('transitionBookId.current')
     expect(page).toContain("void onDecision('liked')")

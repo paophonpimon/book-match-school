@@ -2,6 +2,7 @@ import { ArrowRight, BookHeart, Search, Sparkles } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
+import { PageHeader } from '../../components/PageHeader'
 import { sortLeaderboard } from '../../utils/leaderboard'
 import { isSafeProfileDisplayName } from '../../utils/profile'
 import { getReaderLevel } from '../../utils/readerLevels'
@@ -45,18 +46,14 @@ export function HomePage() {
 
   return (
     <div className="page home-page">
-      <header className="home-header">
-        <Link className="home-brand" to="/" aria-label="Book Match เล่มที่ใช่">
-          <img src={`${assetRoot}/logos/book-match-app-icon.png`} alt="" aria-hidden="true" />
-          <span><strong>เล่มที่ใช่</strong><small>BOOK MATCH</small></span>
-        </Link>
-        <div className="home-level" aria-label={`เลเวล ${readerLevel.level} ${readerLevel.name}`}>
+      <PageHeader
+        center={<div className="home-level" aria-label={`เลเวล ${readerLevel.level} ${readerLevel.name}`}>
           <small>เลเวล</small><strong>{readerLevel.level}</strong>
-        </div>
-        <Link className="avatar home-avatar" to="/profile" aria-label="เปิดโปรไฟล์">
+        </div>}
+        action={<Link className="avatar home-avatar" to="/profile" aria-label="เปิดโปรไฟล์">
           {displayName.charAt(0)}
-        </Link>
-      </header>
+        </Link>}
+      />
 
       <section className="home-hero">
         <span className="home-sparkle home-sparkle--one" aria-hidden="true">✦</span>

@@ -1,5 +1,5 @@
 import { animate, motion, useMotionValue, useTransform, type MotionStyle, type MotionValue } from 'framer-motion'
-import { Bookmark, Heart, RotateCcw, SlidersHorizontal, X } from 'lucide-react'
+import { Bookmark, Heart, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
@@ -13,6 +13,7 @@ import { activeLoanForBook, loanAvailability } from '../../utils/loans'
 import { MatchCelebration } from './MatchCelebration'
 
 const MATCH_CELEBRATION_MS = 1_350
+const SWIPE_ASSET_ROOT = '/assets/book-match/swipe'
 
 export function DiscoverPage() {
   const { books, categories, loans, bookLoanLocks, bookRatings, selectedMoods, selectedCategories, seenBookIds, swipeHistory, syncing, setBookStatus, undoSwipe, resetRound } = useApp()
@@ -22,7 +23,8 @@ export function DiscoverPage() {
   const ranked = useMemo(() => rankBooks(books, selectedMoods, selectedCategories, seed, seenBookIds), [books, selectedMoods, selectedCategories, seed, seenBookIds])
   const current = ranked[0]
   const nextBook = ranked[1]
-  const moodLabels = moods.filter((item) => selectedMoods.includes(item.id)).map((item) => item.label)
+  const selectedMoodOptions = moods.filter((item) => selectedMoods.includes(item.id))
+  const moodLabels = selectedMoodOptions.map((item) => item.label)
   const moodLabel = moodLabels.length ? moodLabels.join(' · ') : 'ทุกอารมณ์'
   const swipeX = useMotionValue(0)
   const swipeY = useMotionValue(0)
@@ -89,12 +91,21 @@ export function DiscoverPage() {
   return (
     <><div className="page discover-page">
       <PageHeader title="ปัดหาเล่ม" action={<button className="icon-button" onClick={() => navigate('/categories')} aria-label="ปรับตัวกรอง"><SlidersHorizontal /></button>} />
-      <div className="discovery-filter"><span>{moodLabel}</span><span>{selectedCategories.length ? `${selectedCategories.length} หมวด` : 'ทุกหมวด'}</span><button onClick={() => navigate('/mood')}>เปลี่ยน</button></div>
+      <div className="discovery-filter">
+        <div className="discovery-filter__chips">
+          {selectedMoodOptions.length
+            ? selectedMoodOptions.map((item) => <span key={item.id}><i aria-hidden="true">{item.icon}</i>{item.label}</span>)
+            : <span><i aria-hidden="true">✦</i>ทุกอารมณ์</span>}
+          <span className="discovery-filter__category"><strong>{selectedCategories.length || 'ทุก'}</strong> หมวด</span>
+        </div>
+        <button onClick={() => navigate('/mood')}>เปลี่ยน</button>
+      </div>
       <div className="swipe-layout">
         <aside className="swipe-aside swipe-aside--left"><p className="eyebrow">เลือกมาเพื่อคุณ</p><h2>{moodLabel}</h2><p>ลำดับจะคงเดิมตลอดรอบนี้ เพื่อให้เลือกได้อย่างสบายใจ</p><div className="mini-progress"><span style={{ width: `${Math.min(100, ((seenBookIds.length + 1) / books.length) * 100)}%` }} /></div><small>{seenBookIds.length + 1} / {books.length} เล่ม</small></aside>
         <section className="swipe-stage" aria-live="polite" data-testid="swipe-deck">
           {nextBook && (
             <article key={nextBook.id} className="swipe-card swipe-card--next" aria-hidden="true">
+              <SwipeCardDecorations />
               <BookCover book={nextBook} loading="eager" />
               <div className="swipe-card__info">
                 <div className="badge-row">
@@ -164,9 +175,25 @@ function SwipeCard({ book, category, availability, rating, x, y, disabled, onDec
         <X />
       </motion.span>
       <motion.span className="swipe-stamp swipe-stamp--save" style={{ opacity: saveOpacity }}>เก็บไว้</motion.span>
+      <SwipeCardDecorations />
       <BookCover book={book} loading="eager" />
-      <div className="swipe-card__info"><div className="badge-row"><span>{category}</span>{book.featured && <span>แนะนำ</span>}<span className={`loan-badge loan-badge--${availability.tone}`}>{availability.label}</span></div><div className="swipe-card__title-line"><BookRating rating={rating} /><h2>{book.title}</h2></div><p>{book.author}</p><small>{book.description}</small></div>
+      <div className="swipe-card__info">
+        <div className="badge-row"><span>{category}</span>{book.featured && <span>แนะนำ</span>}<span className={`loan-badge loan-badge--${availability.tone}`}>{availability.label}</span></div>
+        <div className="swipe-card__title-line"><BookRating rating={rating} /><h2>{book.title}</h2></div>
+        <p>{book.author}</p>
+        <small>{book.description}</small>
+        {book.matchReason && <div className="swipe-card__match-reason"><Sparkles aria-hidden="true" /><span><strong>เหมาะกับคุณ</strong> {book.matchReason}</span></div>}
+      </div>
     </motion.article>
+  )
+}
+
+function SwipeCardDecorations() {
+  return (
+    <>
+      <img className="swipe-card__floral-frame" src={`${SWIPE_ASSET_ROOT}/swipe-card-floral-frame.png`} alt="" aria-hidden="true" draggable={false} />
+      <img className="swipe-card__bookmark-art" src={`${SWIPE_ASSET_ROOT}/swipe-bookmark-heart.png`} alt="" aria-hidden="true" draggable={false} />
+    </>
   )
 }
 

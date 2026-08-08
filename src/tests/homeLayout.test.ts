@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 const page = readFileSync(resolve(process.cwd(), 'src/features/home/HomePage.tsx'), 'utf8')
 const css = readFileSync(resolve(process.cwd(), 'src/styles/global.css'), 'utf8')
+const pageHeader = readFileSync(resolve(process.cwd(), 'src/components/PageHeader.tsx'), 'utf8')
+const studentBrand = readFileSync(resolve(process.cwd(), 'src/components/StudentBrand.tsx'), 'utf8')
 
 describe('student home visual structure', () => {
   it('uses the supplied Book Match artwork without replacing live content', () => {
@@ -34,5 +36,13 @@ describe('student home visual structure', () => {
     expect(css).toContain('@media (min-width: 700px)')
     expect(css).toContain('@media (max-width: 370px)')
     expect(css).toContain('.home-hero__art')
+  })
+
+  it('uses the shared student wordmark without a duplicate app icon', () => {
+    expect(page).toContain('<PageHeader')
+    expect(page).not.toContain('<header className="home-header">')
+    expect(pageHeader).toContain('<StudentBrand compact />')
+    expect(studentBrand).toContain('/book-match-wordmark.png')
+    expect(studentBrand).not.toContain('/book-match-app-icon.png')
   })
 })
