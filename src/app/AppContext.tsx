@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { User } from 'firebase/auth'
 import { demoSettings } from '../data/demoData'
 import { loadCatalog, type CatalogResult, type CatalogSource } from '../services/catalog'
@@ -22,8 +22,9 @@ import {
 } from '../services/firebase'
 import { readStored, writeStored } from '../services/storage'
 import { readSwipeSession, removeSwipeSession, swipeStorageKey, writeSwipeSession } from '../services/swipeStorage'
-import { cancelLoanRemote, loadBookLoanLocks, loadStudentLoans, requestLoanRemote } from '../services/loans'
+import { cancelLoanRemote, loadBookLoanLocks, requestLoanRemote, subscribeBookLoanLocks, subscribeStudentLoans } from '../services/loans'
 import { readingLoanForBook } from '../utils/loans'
+import { createLoanSnapshotTracker, processLoanSnapshot } from '../utils/loanRealtime'
 import type {
   AcademicTerm,
   Book,
@@ -68,6 +69,7 @@ interface AppState {
   catalogError: string | null
   catalogSource: CatalogSource
   levelUp: ReaderLevelResult | null
+  loanApprovalToast: { loanId: string; bookTitle: string } | null
   signInWithGoogle: () => Promise<void>
   setSelectedMoods: (moods: string[]) => void
   setSelectedCategories: (ids: string[]) => void
@@ -84,6 +86,7 @@ interface AppState {
   resetDevice: () => void
   resetRound: () => void
   dismissLevelUp: () => void
+  dismissLoanApprovalToast: () => void
 }
 
 const AppContext = createContext<AppState | null>(null)
@@ -149,7 +152,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [catalogSource, setCatalogSource] = useState<CatalogSource>('error')
   const [readers, setReaders] = useState<Reader[]>([])
   const [levelUp, setLevelUp] = useState<ReaderLevelResult | null>(null)
+  const [loanApprovalToast, setLoanApprovalToast] = useState<{ loanId: string; bookTitle: string } | null>(null)
+  const loanSnapshotTracker = useRef(createLoanSnapshotTracker())
   const profileUid = profile?.uid
+  const authUid = authUser?.uid
 
   const applyCatalog = useCallback((catalog: CatalogResult, term: AcademicTerm) => {
     setBooks(catalog.data.books)
@@ -188,12 +194,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setCurrentTerm(term)
       setCurrentTermError(null)
-      const [catalog, student, nextReaders, nextLoans, nextLocks, nextRatings] = await Promise.all([
+      const [catalog, student, nextReaders, nextRatings] = await Promise.all([
         loadCatalog(),
         loadRemoteStudentState(user, term.id),
         loadReadersRemote(term.id),
-        loadStudentLoans(user.uid),
-        loadBookLoanLocks(),
         loadBookRatingsRemote(term.id).catch(() => ({})),
       ])
       applyCatalog(catalog, term)
@@ -202,8 +206,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReaderStats(student.readerStats)
       setUserBooks(student.userBooks)
       setReaders(nextReaders)
-      setLoans(nextLoans)
-      setBookLoanLocks(nextLocks)
       setBookRatings(nextRatings)
       if (catalog.refresh) {
         void catalog.refresh.then((fresh) => applyCatalog(fresh, term))
@@ -241,6 +243,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unsubscribe()
     }
   }, [clearStudentState, hydrate])
+
+  useEffect(() => {
+    loanSnapshotTracker.current = createLoanSnapshotTracker()
+    setLoanApprovalToast(null)
+    if (!authUid) {
+      setLoans([])
+      return
+    }
+
+    const unsubscribe = subscribeStudentLoans(authUid, (nextLoans) => {
+      const result = processLoanSnapshot(loanSnapshotTracker.current, nextLoans)
+      loanSnapshotTracker.current = result.tracker
+      setLoans(nextLoans)
+      const approvedLoan = result.newlyApproved[0]
+      if (approvedLoan) {
+        setLoanApprovalToast({ loanId: approvedLoan.id, bookTitle: approvedLoan.bookTitle })
+      }
+    }, (error) => {
+      setSyncError(firebaseErrorMessage(error, 'ติดตามสถานะการยืมแบบเรียลไทม์ไม่สำเร็จ'))
+    })
+
+    return unsubscribe
+  }, [authUid])
+
+  useEffect(() => {
+    if (!authUid) {
+      setBookLoanLocks({})
+      return
+    }
+    return subscribeBookLoanLocks(setBookLoanLocks, (error) => {
+      setSyncError(firebaseErrorMessage(error, 'ติดตามสถานะพร้อมยืมของหนังสือแบบเรียลไทม์ไม่สำเร็จ'))
+    })
+  }, [authUid])
+
+  useEffect(() => {
+    if (!loanApprovalToast) return
+    const timeoutId = window.setTimeout(() => setLoanApprovalToast(null), 5500)
+    return () => window.clearTimeout(timeoutId)
+  }, [loanApprovalToast])
 
   useLayoutEffect(() => {
     if (!profileUid || !currentTerm) {
@@ -520,11 +561,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const reloadLoans = async () => {
     if (!profile) return
-    const [nextLoans, nextLocks] = await Promise.all([
-      loadStudentLoans(profile.uid),
-      loadBookLoanLocks(),
-    ])
-    setLoans(nextLoans)
+    const nextLocks = await loadBookLoanLocks()
     setBookLoanLocks(nextLocks)
   }
 
@@ -606,6 +643,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     catalogError,
     catalogSource,
     levelUp,
+    loanApprovalToast,
     signInWithGoogle,
     setSelectedMoods,
     setSelectedCategories,
@@ -622,6 +660,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     resetDevice,
     resetRound,
     dismissLevelUp: () => setLevelUp(null),
+    dismissLoanApprovalToast: () => setLoanApprovalToast(null),
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

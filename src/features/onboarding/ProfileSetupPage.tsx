@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, BadgeCheck, Link2, LoaderCircle } from 'lucide-react'
+import { ArrowRight, BadgeCheck, Check, Link2, LoaderCircle } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
+import { normalizeStudentAvatarId, studentAvatars, studentAvatarSrc, type StudentAvatarId } from '../../data/avatars'
 import { classNameFromGradeLevel, gradeLevelFromClassName, hasPermanentStudentId, validateStudentProfile } from '../../utils/profile'
 
 export function ProfileSetupPage() {
@@ -16,6 +17,7 @@ export function ProfileSetupPage() {
     ? location.state.profileError
     : ''
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '')
+  const [avatarId, setAvatarId] = useState<StudentAvatarId>(normalizeStudentAvatarId(profile?.avatarId))
   const [studentId, setStudentId] = useState(profile?.studentId ?? '')
   const [firstName, setFirstName] = useState(profile?.firstName ?? '')
   const [lastName, setLastName] = useState(profile?.lastName ?? '')
@@ -40,6 +42,7 @@ export function ProfileSetupPage() {
     setSaving(true)
     try {
       await saveProfile({
+        avatarId,
         studentId: studentId.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -63,8 +66,8 @@ export function ProfileSetupPage() {
       <section className="form-card profile-setup">
         <span className="feature-icon"><BadgeCheck /></span>
         <p className="eyebrow">โปรไฟล์นักอ่าน</p>
-        <h1>ให้เราเรียกคุณว่าอะไรดี?</h1>
-        <p>ข้อมูลนี้ใช้สร้างสมาชิกถาวรและบันทึกอันดับการอ่านของคุณ</p>
+        <h1>{profile ? 'ปรับโปรไฟล์นักอ่านของคุณ' : 'ให้เราเรียกคุณว่าอะไรดี?'}</h1>
+        <p>{profile ? 'เปลี่ยนอวตารหรือข้อมูลที่แสดงได้ทุกเมื่อ' : 'ข้อมูลนี้ใช้สร้างสมาชิกถาวรและบันทึกอันดับการอ่านของคุณ'}</p>
         {needsGoogleLink && (
           <div className="profile-google-link" role="status">
             <strong>เชื่อมบัญชี Google ก่อนบันทึก</strong>
@@ -75,6 +78,28 @@ export function ProfileSetupPage() {
           </div>
         )}
         <form onSubmit={submit} noValidate>
+          <fieldset className="avatar-picker">
+            <legend>เลือกอวตารประจำตัว</legend>
+            <p>เลือกแบบที่เป็นคุณ เปลี่ยนใหม่ได้ตลอดจากหน้าโปรไฟล์</p>
+            <div className="avatar-picker__grid">
+              {studentAvatars.map((avatar) => {
+                const selected = avatar.id === avatarId
+                return (
+                  <button
+                    className={selected ? 'avatar-picker__option selected' : 'avatar-picker__option'}
+                    type="button"
+                    key={avatar.id}
+                    aria-label={avatar.label}
+                    aria-pressed={selected}
+                    onClick={() => setAvatarId(avatar.id)}
+                  >
+                    <img src={studentAvatarSrc(avatar.id)} alt="" loading="lazy" />
+                    {selected && <span aria-hidden="true"><Check /></span>}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
           <label>เลขประจำตัวนักเรียน<input required autoFocus={!studentIdLocked} disabled={studentIdLocked} inputMode="numeric" autoComplete="off" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="ระบุเลขประจำตัวนักเรียน" maxLength={20} /></label>
           <div className="form-row">
             <label>ชื่อ<input required autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="ชื่อจริง" maxLength={60} /></label>
@@ -86,7 +111,7 @@ export function ProfileSetupPage() {
           </div>
           <label>ชื่อเล่น/ชื่อที่จะแสดง<input required autoComplete="nickname" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="เช่น มินยอดนักอ่าน" maxLength={40} /></label>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="button button--primary button--wide" disabled={saving || syncing || needsGoogleLink}>{saving ? 'กำลังบันทึก…' : needsGoogleLink ? 'เชื่อมบัญชี Google ก่อน' : 'ไปเลือกอารมณ์'} <ArrowRight /></button>
+          <button className="button button--primary button--wide" disabled={saving || syncing || needsGoogleLink}>{saving ? 'กำลังบันทึก…' : needsGoogleLink ? 'เชื่อมบัญชี Google ก่อน' : profile ? 'บันทึกโปรไฟล์' : 'ไปเลือกอารมณ์'} <ArrowRight /></button>
         </form>
         <small>{studentIdLocked
           ? `บัญชีสมาชิกผูกกับ ${authUser.email} และไม่สามารถเปลี่ยนเลขประจำตัวนักเรียนภายหลังได้`

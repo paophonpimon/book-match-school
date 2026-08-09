@@ -1,8 +1,9 @@
-import { ArrowRight, BookHeart, Search, Sparkles } from 'lucide-react'
+import { ArrowRight, Sparkles } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
+import { studentAvatarSrc } from '../../data/avatars'
 import { sortLeaderboard } from '../../utils/leaderboard'
 import { isSafeProfileDisplayName } from '../../utils/profile'
 import { getReaderLevel } from '../../utils/readerLevels'
@@ -30,6 +31,7 @@ export function HomePage() {
       ...safeReaders,
       {
         uid: profile.uid,
+        avatarId: profile.avatarId,
         displayName: profile.displayName,
         className: profile.className,
         readCount: read,
@@ -51,7 +53,7 @@ export function HomePage() {
           <small>เลเวล</small><strong>{readerLevel.level}</strong>
         </div>}
         action={<Link className="avatar home-avatar" to="/profile" aria-label="เปิดโปรไฟล์">
-          {displayName.charAt(0)}
+          <img src={studentAvatarSrc(profile?.avatarId)} alt="" />
         </Link>}
       />
 
@@ -69,17 +71,13 @@ export function HomePage() {
         </div>
         <img
           className="home-hero__art"
-          src={`${assetRoot}/home/home-hero-books.png`}
+          src={`${assetRoot}/home/home-hero-books.webp`}
           alt="กองหนังสือสีสันสดใส"
           loading="eager"
+          fetchPriority="high"
+          decoding="async"
         />
       </section>
-
-      <Link className="home-start-card" to="/mood">
-        <span className="home-start-card__icon"><Search aria-hidden="true" /></span>
-        <span><strong>เริ่มค้นหาเล่มที่ใช่</strong><small>เลือกจากอารมณ์ของคุณวันนี้</small></span>
-        <ArrowRight aria-hidden="true" />
-      </Link>
 
       <div className="section-heading home-section-heading">
         <h2>มุมของนักอ่าน</h2>
@@ -88,17 +86,17 @@ export function HomePage() {
 
       <section className="home-stat-grid" aria-label="สถิติการอ่านของฉัน">
         <Link to="/shelf" className="home-stat-card home-stat-card--green">
-          <img src={`${assetRoot}/home/home-reading-corner.png`} alt="" aria-hidden="true" />
+          <img src={`${assetRoot}/home/home-reading-corner.webp`} alt="" aria-hidden="true" loading="lazy" decoding="async" />
           <strong>{reading}</strong>
           <span>กำลังอ่าน</span>
         </Link>
         <Link to="/shelf" className="home-stat-card home-stat-card--yellow">
-          <span className="home-stat-card__icon"><BookHeart aria-hidden="true" /></span>
+          <img src={`${assetRoot}/home/home-read-completed.webp`} alt="" aria-hidden="true" loading="lazy" decoding="async" />
           <strong>{read}</strong>
           <span>อ่านจบแล้ว</span>
         </Link>
         <Link to="/leaderboard" className="home-stat-card home-stat-card--blue">
-          <img src={`${assetRoot}/leaderboard/rank-trophy.png`} alt="" aria-hidden="true" />
+          <img src={`${assetRoot}/leaderboard/rank-trophy.webp`} alt="" aria-hidden="true" loading="lazy" decoding="async" />
           <strong>{myRank}</strong>
           <span>อันดับของฉัน</span>
         </Link>
@@ -110,7 +108,7 @@ export function HomePage() {
           <p>หนังสือหนึ่งเล่ม<br />อาจพาเราไปได้ไกลกว่าที่คิด</p>
           <i>ชวนเพื่อนมาอ่านด้วยกันนะ</i>
         </div>
-        <img src={`${assetRoot}/home/home-quote-books-coffee.png`} alt="หนังสือและแก้วเครื่องดื่ม" loading="lazy" />
+        <img src={`${assetRoot}/home/home-quote-books-coffee.webp`} alt="หนังสือและแก้วเครื่องดื่ม" loading="lazy" decoding="async" />
       </section>
     </div>
   )

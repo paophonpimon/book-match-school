@@ -1,0 +1,11 @@
+filename,group,number,x0,y0,x1,y1
+avatar-boy-01.png,boy,1,0,80,297,508
+avatar-boy-02.png,boy,2,283,80,584,509
+avatar-boy-03.png,boy,3,571,80,873,507
+avatar-boy-04.png,boy,4,860,80,1161,510
+avatar-boy-05.png,boy,5,1148,80,1448,510
+avatar-girl-01.png,girl,1,0,542,295,975
+avatar-girl-02.png,girl,2,281,542,582,974
+avatar-girl-03.png,girl,3,569,542,869,975
+avatar-girl-04.png,girl,4,857,542,1157,976
+avatar-girl-05.png,girl,5,1144,542,1445,976

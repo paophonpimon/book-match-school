@@ -4,6 +4,7 @@ import {
   getDocs,
   getDocsFromServer,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -14,6 +15,7 @@ import {
   type DocumentSnapshot,
   type Firestore,
   type QueryDocumentSnapshot,
+  type Unsubscribe,
 } from 'firebase/firestore'
 import type { Book, BookLoanLock, Loan, LoanAuditAction, LoanStatus, MembershipStatus, Profile, TermStatus } from '../types'
 import {
@@ -136,22 +138,56 @@ export async function loadStudentLoans(uid: string) {
   return snapshot.docs.map(normalizeLoanSnapshot)
 }
 
+export function subscribeStudentLoans(
+  uid: string,
+  onLoans: (loans: Loan[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  const firestore = requireStudentFirestore()
+  return onSnapshot(query(
+    collection(firestore, 'loans'),
+    where('uid', '==', uid),
+    orderBy('createdAt', 'desc'),
+  ), (snapshot) => {
+    try {
+      onLoans(snapshot.docs.map(normalizeLoanSnapshot))
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error(String(error)))
+    }
+  }, (error) => onError(error))
+}
+
 export async function loadBookLoanLocks() {
   const firestore = requireStudentFirestore()
   const snapshot = await getDocs(collection(firestore, 'bookLoanLocks'))
+  return normalizeBookLoanLocks(snapshot.docs)
+}
+
+function normalizeBookLoanLocks(items: QueryDocumentSnapshot<DocumentData>[]) {
   const locks: Record<string, BookLoanLock> = {}
-  snapshot.forEach((item) => {
+  items.forEach((item) => {
     const data = item.data()
     if (!['approved', 'borrowed'].includes(String(data.status))) return
     locks[item.id] = {
       bookId: String(data.bookId ?? item.id),
       loanId: String(data.loanId ?? ''),
       status: data.status as BookLoanLock['status'],
+      dueAt: data.dueAt == null ? null : asIso(data.dueAt),
       updatedAt: asIso(data.updatedAt),
       lastAuditId: String(data.lastAuditId ?? ''),
     }
   })
   return locks
+}
+
+export function subscribeBookLoanLocks(
+  onLocks: (locks: Record<string, BookLoanLock>) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  const firestore = requireStudentFirestore()
+  return onSnapshot(collection(firestore, 'bookLoanLocks'), (snapshot) => {
+    onLocks(normalizeBookLoanLocks(snapshot.docs))
+  }, (error) => onError(error))
 }
 
 export async function requestLoanRemote(book: Book, profile: Profile, termId: string) {
@@ -330,6 +366,7 @@ function adminRefs(firestore: Firestore, loan: Loan) {
     activeRef: doc(firestore, 'studentLoanActiveKeys', activeKeyId(loan.uid, loan.bookId)),
     lockRef: doc(firestore, 'bookLoanLocks', loan.bookId),
     auditRef: doc(collection(firestore, 'loanAuditLogs')),
+    notificationRef: doc(firestore, 'studentNotifications', loan.id),
   }
 }
 
@@ -349,6 +386,7 @@ function logAdminLoanFailure(
       activeKey: `studentLoanActiveKeys/${activeKeyId(loan.uid, loan.bookId)}`,
       lock: `bookLoanLocks/${loan.bookId}`,
       auditCollection: 'loanAuditLogs',
+      notification: `studentNotifications/${loan.id}`,
     },
   })
 }
@@ -361,6 +399,24 @@ export async function loadAdminLoans() {
     limit(ADMIN_LOAN_LIMIT),
   ))
   return snapshot.docs.map(normalizeLoanSnapshot)
+}
+
+export function subscribeAdminLoans(
+  onLoans: (loans: Loan[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  const { firestore } = getAdminFirebaseContext()
+  return onSnapshot(query(
+    collection(firestore, 'loans'),
+    orderBy('requestedAt', 'desc'),
+    limit(ADMIN_LOAN_LIMIT),
+  ), (snapshot) => {
+    try {
+      onLoans(snapshot.docs.map(normalizeLoanSnapshot))
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error(String(error)))
+    }
+  }, (error) => onError(error))
 }
 
 export async function approveLoanAsAdmin(loan: Loan, loanDays: number, note = '') {
@@ -399,6 +455,7 @@ export async function approveLoanAsAdmin(loan: Loan, loanDays: number, note = ''
         bookId: loan.bookId,
         loanId: loan.id,
         status: 'approved',
+        dueAt: null,
         updatedAt: timestamp,
         lastAuditId: refs.auditRef.id,
       })
@@ -406,6 +463,15 @@ export async function approveLoanAsAdmin(loan: Loan, loanDays: number, note = ''
         'approve', loan.id, loan.bookId, loan.uid, 'pending', 'approved',
         user.uid, user.email?.toLocaleLowerCase('en-US') ?? null, note,
       ))
+      transaction.set(refs.notificationRef, {
+        uid: loan.uid,
+        type: 'loan_approved',
+        loanId: loan.id,
+        bookId: loan.bookId,
+        bookTitle: current.bookTitle,
+        createdAt: timestamp,
+        readAt: null,
+      })
       return true
     })
   } catch (error) {
@@ -485,6 +551,7 @@ export async function pickupLoanAsAdmin(loan: Loan, loanDays: number) {
     })
     transaction.update(refs.lockRef, {
       status: 'borrowed',
+      dueAt,
       updatedAt: timestamp,
       lastAuditId: refs.auditRef.id,
     })
@@ -512,13 +579,15 @@ export async function renewLoanAsAdmin(loan: Loan) {
       throw new Error('Loan lock ไม่ตรงกับรายการยืม')
     }
     const timestamp = serverTimestamp()
+    const dueAt = Timestamp.fromDate(calculateDueAt(current.dueAt, current.loanDays))
     transaction.update(refs.loanRef, {
-      dueAt: Timestamp.fromDate(calculateDueAt(current.dueAt, current.loanDays)),
+      dueAt,
       renewCount: current.renewCount + 1,
       updatedAt: timestamp,
       lastAuditId: refs.auditRef.id,
     })
     transaction.update(refs.lockRef, {
+      dueAt,
       updatedAt: timestamp,
       lastAuditId: refs.auditRef.id,
     })

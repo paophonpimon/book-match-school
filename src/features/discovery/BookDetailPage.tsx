@@ -65,9 +65,11 @@ export function BookDetailPage() {
   const isMatch = search.get('match') === '1'
   const activeLoan = activeLoanForBook(loans, book.id)
   const latestLoan = latestLoanForBook(loans, book.id)
-  const availability = loanAvailability(activeLoan, bookLoanLocks[book.id])
+  const bookLock = bookLoanLocks[book.id]
+  const availability = loanAvailability(activeLoan, bookLock)
   const canStartReading = canStartReadingBook(loans, book.id)
   const visibleReviews = includeOwnReview(reviewSummary.reviews, userBook, profile?.displayName ?? '')
+  const detailTags = [...new Set([...(book.tags ?? []), ...book.moodTags])]
 
   async function submitLoanRequest() {
     if (loanSubmitting) return
@@ -102,11 +104,23 @@ export function BookDetailPage() {
       <PageHeader title={isMatch ? 'เจอเล่มที่ใช่!' : 'รายละเอียดหนังสือ'} back />
       {isMatch && <div className="match-confetti" aria-hidden="true">✦ <Sparkles /> ❋</div>}
       <section className="detail-hero">
-        <BookCover book={book} loading="eager" />
-        <div className="detail-summary"><div className="badge-row"><span>{category}</span>{book.featured && <span>เล่มแนะนำ</span>}</div><h1>{book.title}</h1><p>{book.author}</p><div className="detail-rating">{reviewSummary.ratingCount > 0 ? <>★ {reviewSummary.ratingAverage.toFixed(1)} <span>· จาก {reviewSummary.ratingCount.toLocaleString('th-TH')} รีวิว</span></> : <span>{reviewsLoading ? 'กำลังโหลดคะแนน…' : 'ยังไม่มีคะแนนรีวิว'}</span>}</div></div>
+        <span className="detail-hero__spark detail-hero__spark--one" aria-hidden="true">✦</span>
+        <span className="detail-hero__spark detail-hero__spark--two" aria-hidden="true">✧</span>
+        <BookOpen className="detail-hero__book-outline" aria-hidden="true" />
+        <div className="detail-hero__cover"><BookCover book={book} loading="eager" /></div>
+        <div className="detail-summary">
+          <div className="badge-row"><span>{category}</span>{book.featured && <span>เล่มแนะนำ</span>}</div>
+          <h1>{book.title}</h1>
+          <p>{book.author}</p>
+          <div className="detail-rating">
+            {reviewSummary.ratingCount > 0
+              ? <><Star fill="currentColor" aria-hidden="true" /><strong>{reviewSummary.ratingAverage.toFixed(1)}</strong><span>จาก {reviewSummary.ratingCount.toLocaleString('th-TH')} รีวิว</span></>
+              : <span>{reviewsLoading ? 'กำลังโหลดคะแนน…' : 'ยังไม่มีคะแนนรีวิว'}</span>}
+          </div>
+        </div>
       </section>
       {book.audioUrl?.trim() && <AudioNarration title={book.title} audioUrl={book.audioUrl} />}
-      <section className={`loan-card loan-card--${availability.tone}`}>
+      <section className={`loan-card loan-card--${availability.tone}${!activeLoan && !bookLock ? ' loan-card--requestable' : ''}`}>
         <div className="loan-card__heading">
           <span><Library /></span>
           <div><small>บริการยืมหนังสือ</small><strong>{availability.label}</strong></div>
@@ -129,7 +143,7 @@ export function BookDetailPage() {
             </p>
           </div>
         )}
-        {!activeLoan && !bookLoanLocks[book.id] && (
+        {!activeLoan && !bookLock && (
           <>
             {latestLoan?.status === 'returned' && <p>คุณเคยยืมและคืนหนังสือเล่มนี้แล้ว สามารถส่งคำขอใหม่ได้</p>}
             {latestLoan?.status === 'rejected' && <p>คำขอก่อนหน้านี้ไม่ได้รับการอนุมัติ คุณสามารถส่งคำขอใหม่ได้</p>}
@@ -139,12 +153,34 @@ export function BookDetailPage() {
             </button>
           </>
         )}
-        {!activeLoan && bookLoanLocks[book.id] && <p>หนังสือเล่มนี้ยังไม่พร้อมให้ยืมในขณะนี้ กรุณากลับมาตรวจสอบอีกครั้ง</p>}
+        {!activeLoan && bookLock && (
+          <>
+            {bookLock.status === 'approved' ? (
+              <p>คำขอของนักเรียนอีกคนได้รับการอนุมัติแล้ว แต่ยังไม่ได้รับหนังสือจากห้องสมุด</p>
+            ) : (
+              <div className="loan-due">
+                <CalendarClock />
+                <p>
+                  <strong>{bookLock.dueAt ? `กำหนดคืน ${formatThaiLoanDate(bookLock.dueAt)}` : 'มีผู้ยืมหนังสือเล่มนี้อยู่'}</strong>
+                  <span>{bookLock.dueAt ? 'เก็บหนังสือไว้ก่อน แล้วกลับมาตรวจสอบหลังวันกำหนดคืน' : 'วันกำหนดคืนของรายการเดิมยังไม่ถูกบันทึก'}</span>
+                </p>
+              </div>
+            )}
+            <button className="button button--secondary button--wide" type="button" onClick={() => setBookStatus(book.id, 'saved')}>
+              <Bookmark /> เก็บไว้ก่อน
+            </button>
+          </>
+        )}
         {loanError && <p className="loan-card__error" role="alert">{loanError}</p>}
         <button className="text-button loan-history-link" type="button" onClick={() => navigate('/loans')}>ดูการยืมของฉัน</button>
       </section>
-      <section className="detail-copy"><h2>เรื่องนี้เกี่ยวกับอะไร?</h2><p>{book.description}</p><div className="mood-tags">{book.moodTags.map((mood) => <span key={mood}>#{mood}</span>)}</div></section>
+      <section className="detail-copy"><h2>เรื่องนี้เกี่ยวกับอะไร?</h2><p>{book.description}</p>{detailTags.length > 0 && <div className="mood-tags">{detailTags.map((tag) => <span key={tag}>#{tag}</span>)}</div>}</section>
       <section className="shelf-location"><MapPin /><div><small>พบหนังสือได้ที่</small><strong>{book.shelfCode}</strong><p>{book.shelfDescription}</p></div></section>
+      <div className="detail-actions">
+        {status !== 'reading' && status !== 'read' && canStartReading && <button className="button button--primary button--wide" onClick={() => { setBookStatus(book.id, 'reading'); navigate('/shelf') }}><Play /> เริ่มอ่านเล่มนี้</button>}
+        <div className="button-row">{(activeLoan || !bookLock) && <button className="button button--secondary detail-action--save" onClick={() => setBookStatus(book.id, 'saved')}><Bookmark /> เก็บไว้ก่อน</button>}<button className="button button--secondary detail-action--next" onClick={() => navigate('/discover')}><Heart /> ปัดต่อไป</button></div>
+        {status === 'reading' && <button className="button button--primary button--wide" onClick={() => navigate(`/review/${book.id}`)}><BookOpen /> อ่านจบแล้ว</button>}
+      </div>
       {status === 'read' && userBook.review && (
         <section className="my-review-card" id="my-review">
           <p className="eyebrow">บันทึกการอ่านของฉัน</p>
@@ -160,11 +196,6 @@ export function BookDetailPage() {
           {userBook.readAt && <small>อ่านจบเมื่อ {new Date(userBook.readAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</small>}
         </section>
       )}
-      <div className="detail-actions">
-        {status !== 'reading' && status !== 'read' && canStartReading && <button className="button button--primary button--wide" onClick={() => { setBookStatus(book.id, 'reading'); navigate('/shelf') }}><Play /> เริ่มอ่านเล่มนี้</button>}
-        <div className="button-row"><button className="button button--secondary" onClick={() => setBookStatus(book.id, 'saved')}><Bookmark /> เก็บไว้ก่อน</button><button className="button button--secondary" onClick={() => navigate('/discover')}><Heart /> ปัดต่อไป</button></div>
-        {status === 'reading' && <button className="button button--primary button--wide" onClick={() => navigate(`/review/${book.id}`)}><BookOpen /> อ่านจบแล้ว</button>}
-      </div>
       <ReaderReviews
         reviews={visibleReviews}
         ratingAverage={reviewSummary.ratingAverage}

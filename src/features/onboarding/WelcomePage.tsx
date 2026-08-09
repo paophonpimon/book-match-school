@@ -4,7 +4,7 @@ import { useApp } from '../../app/AppContext'
 import { Brand } from '../../components/Brand'
 import { LoadingScreen } from '../../components/AppShell'
 import { getStudentEntryRoute } from '../../utils/studentRouting'
-import welcomeBookArt from '../../../img/logo-book.png'
+import welcomeBookArt from '../../../img/logo-book.webp'
 
 function GoogleMark() {
   return (

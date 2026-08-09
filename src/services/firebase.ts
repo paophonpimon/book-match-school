@@ -42,8 +42,10 @@ import type {
   StudentMembership,
   UserBook,
 } from '../types'
+import { normalizeStudentAvatarId } from '../data/avatars'
 import { applyCompletion, applyStatusTransition, countersForCurrentStatus, emptyBookCounters, planLikeTransaction, planSavedTransaction, type BookCounters } from '../utils/firestoreCounters'
 import { getReaderLevel } from '../utils/readerLevels'
+import { shouldUseGoogleSignInRedirect } from '../utils/googleSignInFlow'
 import { assertMembershipRegistrationAvailable } from '../utils/membership'
 import { planLifetimeReadCredit } from '../utils/readerStats'
 import { env, firebaseConfigured } from './env'
@@ -113,6 +115,11 @@ export async function signInStudentWithGoogle() {
   await setPersistence(auth, browserLocalPersistence)
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
+  if (shouldUseGoogleSignInRedirect()) {
+    if (auth.currentUser?.isAnonymous) await linkWithRedirect(auth.currentUser, provider)
+    else await signInWithRedirect(auth, provider)
+    return null
+  }
   try {
     if (auth.currentUser?.isAnonymous) {
       return (await linkWithPopup(auth.currentUser, provider)).user
@@ -237,6 +244,7 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
   const progressRef = doc(firestore, 'progress', `${termId}_${profile.uid}`)
   const membershipRef = doc(firestore, 'studentMemberships', studentId)
   const membershipUidRef = doc(firestore, 'studentMembershipUids', profile.uid)
+  let editingExistingProfile = false
   try {
     await runTransaction(firestore, async (transaction) => {
     const [profileSnapshot, progressSnapshot, membershipSnapshot, membershipUidSnapshot] = await Promise.all([
@@ -245,6 +253,7 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
       transaction.get(membershipRef),
       transaction.get(membershipUidRef),
     ])
+    editingExistingProfile = profileSnapshot.exists()
     const previousProfile = profileSnapshot.data()
     const previousStudentId = typeof previousProfile?.studentId === 'string' ? previousProfile.studentId : ''
     assertMembershipRegistrationAvailable({
@@ -276,6 +285,7 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
     }
     transaction.set(profileRef, {
       uid: profile.uid,
+      avatarId: normalizeStudentAvatarId(profile.avatarId),
       displayName: profile.displayName,
       className: profile.className,
       studentNumber: profile.studentNumber,
@@ -293,6 +303,7 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
     transaction.set(progressRef, {
       uid: profile.uid,
       termId,
+      avatarId: normalizeStudentAvatarId(profile.avatarId),
       displayName: profile.displayName,
       className: profile.className,
       readCount: Number(progress?.readCount ?? 0),
@@ -306,6 +317,7 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
     console.error('[Firestore] register-student-membership failed', {
       code,
+      operation: editingExistingProfile ? 'update-student-profile' : 'register-student-membership',
       paths: [
         `profiles/${profile.uid}`,
         `studentMemberships/${studentId}`,
@@ -314,6 +326,9 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
       ],
     })
     if (code.includes('permission-denied')) {
+      if (editingExistingProfile) {
+        throw new Error('แก้ไขโปรไฟล์ไม่สำเร็จ: ระบบ Firestore ยังไม่อนุญาตข้อมูลโปรไฟล์รูปแบบล่าสุด กรุณาติดต่อผู้ดูแลเพื่ออัปเดตกฎความปลอดภัย')
+      }
       throw new Error('ไม่สามารถใช้เลขประจำตัวนักเรียนนี้ได้ อาจมีบัญชีสมาชิกลงทะเบียนเลขนี้ไว้แล้ว กรุณาตรวจเลขอีกครั้งหรือติดต่อผู้ดูแล')
     }
     throw error
@@ -337,6 +352,7 @@ export async function loadRemoteStudentState(user: User, termId: string): Promis
   ])
   const profile: Profile | null = profileData ? {
     uid: user.uid,
+    avatarId: normalizeStudentAvatarId(profileData.avatarId),
     displayName: String(profileData.displayName ?? ''),
     className: String(profileData.className ?? ''),
     studentNumber: String(profileData.studentNumber ?? ''),
@@ -386,6 +402,7 @@ export async function loadReadersRemote(termId: string): Promise<Reader[]> {
     const data = item.data()
     return {
       uid: String(data.uid),
+      avatarId: normalizeStudentAvatarId(data.avatarId),
       displayName: String(data.displayName ?? ''),
       className: String(data.className ?? ''),
       readCount: Number(data.readCount ?? 0),
@@ -421,6 +438,7 @@ export async function saveUserBookRemote(userBook: UserBook, profile: Profile) {
     transaction.set(progressRef, {
       uid: userBook.uid,
       termId: userBook.termId,
+      avatarId: normalizeStudentAvatarId(profile.avatarId),
       displayName: profile.displayName,
       className: profile.className,
       readCount: Number(progress?.readCount ?? 0),
@@ -487,6 +505,7 @@ export async function saveLikedBookRemote(userBook: UserBook, profile: Profile) 
       const progressPayload = {
         uid: userBook.uid,
         termId: userBook.termId,
+        avatarId: normalizeStudentAvatarId(profile.avatarId),
         displayName: profile.displayName,
         className: profile.className,
         readCount: Number(progress?.readCount ?? 0),
@@ -576,6 +595,7 @@ export async function deleteUserBookRemote(userBook: UserBook, profile: Profile)
     transaction.set(progressRef, {
       uid: userBook.uid,
       termId: userBook.termId,
+      avatarId: normalizeStudentAvatarId(profile.avatarId),
       displayName: profile.displayName,
       className: profile.className,
       readCount: Number(progress?.readCount ?? 0),
@@ -747,6 +767,7 @@ export async function completeBookRemote(userBook: UserBook, profile: Profile): 
     transaction.set(progressRef, {
       uid: userBook.uid,
       termId: userBook.termId,
+      avatarId: normalizeStudentAvatarId(profile.avatarId),
       displayName: profile.displayName,
       className: profile.className,
       readCount: Number(progress?.readCount ?? 0) + 1,

@@ -16,7 +16,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   approveLoanAsAdmin,
-  loadAdminLoans,
+  subscribeAdminLoans,
   pickupLoanAsAdmin,
   rejectLoanAsAdmin,
   renewLoanAsAdmin,
@@ -68,31 +68,43 @@ export function AdminLoanManagement({ refreshVersion = 0, onRefreshComplete }: A
   const [dialog, setDialog] = useState<AdminLoanDialogState | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [listenerVersion, setListenerVersion] = useState(0)
+  const onRefreshCompleteRef = useRef(onRefreshComplete)
   const previousRefreshVersion = useRef(refreshVersion)
 
-  async function load(showLoading = false) {
-    if (showLoading) setLoading(true)
-    else setRefreshing(true)
+  useEffect(() => {
+    onRefreshCompleteRef.current = onRefreshComplete
+  }, [onRefreshComplete])
+
+  useEffect(() => {
     setError('')
-    try {
-      setLoans(await loadAdminLoans())
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'โหลดรายการยืมจาก Firestore ไม่สำเร็จ')
-    } finally {
+    const isExternalRefresh = refreshVersion !== previousRefreshVersion.current
+    previousRefreshVersion.current = refreshVersion
+    let waitingForInitialSnapshot = true
+    const finishExternalRefresh = () => {
+      if (!waitingForInitialSnapshot) return
+      waitingForInitialSnapshot = false
+      if (isExternalRefresh) onRefreshCompleteRef.current?.()
+    }
+    const unsubscribe = subscribeAdminLoans((nextLoans) => {
+      setLoans(nextLoans)
       setLoading(false)
       setRefreshing(false)
-    }
+      finishExternalRefresh()
+    }, (nextError) => {
+      setError(nextError.message || 'โหลดรายการยืมจาก Firestore ไม่สำเร็จ')
+      setLoading(false)
+      setRefreshing(false)
+      finishExternalRefresh()
+    })
+    return unsubscribe
+  }, [refreshVersion, listenerVersion])
+
+  function restartListener() {
+    setRefreshing(true)
+    setError('')
+    setListenerVersion((current) => current + 1)
   }
-
-  useEffect(() => {
-    void load(true)
-  }, [])
-
-  useEffect(() => {
-    if (refreshVersion === previousRefreshVersion.current) return
-    previousRefreshVersion.current = refreshVersion
-    void load(false).finally(() => onRefreshComplete?.())
-  }, [refreshVersion, onRefreshComplete])
 
   const classrooms = useMemo(
     () => [...new Set(loans.map((loan) => loan.studentClassroom).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th')),
@@ -147,7 +159,6 @@ export function AdminLoanManagement({ refreshVersion = 0, onRefreshComplete }: A
         return: 'ยืนยันคืนหนังสือและปลดล็อกหนังสือแล้ว',
       } satisfies Record<typeof action, string>)[action])
       setDialog(null)
-      await load(false)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'เปลี่ยนสถานะการยืมไม่สำเร็จ')
     } finally {
@@ -159,7 +170,7 @@ export function AdminLoanManagement({ refreshVersion = 0, onRefreshComplete }: A
     <section className="dashboard-card admin-loans-panel" id="loan-management">
       <div className="section-heading">
         <div><p className="eyebrow">ระบบยืม–คืน</p><h2>จัดการคำขอยืมและการคืนหนังสือ</h2></div>
-        <button className="button button--secondary button--small" type="button" onClick={() => void load(false)} disabled={refreshing}>
+        <button className="button button--secondary button--small" type="button" onClick={restartListener} disabled={refreshing}>
           <RefreshCw className={refreshing ? 'spin' : ''} /> รีเฟรช
         </button>
       </div>

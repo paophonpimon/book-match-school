@@ -173,10 +173,12 @@ describe('overdue, UI status and Admin filtering', () => {
   })
 
   it('shows the correct student-facing availability labels without borrower identity', () => {
-    const lock: BookLoanLock = { bookId: 'book-1', loanId: 'other-loan', status: 'borrowed', updatedAt: now, lastAuditId: 'audit-2' }
+    const lock: BookLoanLock = { bookId: 'book-1', loanId: 'other-loan', status: 'borrowed', dueAt: '2026-08-08T09:00:00.000Z', updatedAt: now, lastAuditId: 'audit-2' }
+    const reservation: BookLoanLock = { ...lock, status: 'approved', dueAt: null }
     expect(loanAvailability(null, undefined).label).toBe('พร้อมให้ยืม')
     expect(loanAvailability(loan(), undefined).label).toBe('คุณกำลังรออนุมัติ')
-    expect(loanAvailability(null, lock).label).toBe('มีผู้ยืมแล้ว')
+    expect(loanAvailability(null, reservation).label).toBe('มีผู้จองรอรับ')
+    expect(loanAvailability(null, lock).label).toBe('มีผู้ยืมอยู่')
     expect(loanAvailability(borrowed, lock, new Date('2026-08-10').getTime()).label).toBe('เกินกำหนดคืน')
   })
 

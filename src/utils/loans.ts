@@ -194,8 +194,8 @@ export function loanAvailability(
       ? { label: 'เกินกำหนดคืน', tone: 'overdue' }
       : { label: 'คุณกำลังยืมเล่มนี้', tone: 'borrowed' }
   }
-  if (lock?.status === 'approved') return { label: 'รอรับหนังสือ', tone: 'unavailable' }
-  if (lock?.status === 'borrowed') return { label: 'มีผู้ยืมแล้ว', tone: 'unavailable' }
+  if (lock?.status === 'approved') return { label: 'มีผู้จองรอรับ', tone: 'unavailable' }
+  if (lock?.status === 'borrowed') return { label: 'มีผู้ยืมอยู่', tone: 'unavailable' }
   return { label: 'พร้อมให้ยืม', tone: 'available' }
 }
 

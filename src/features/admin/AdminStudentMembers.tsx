@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle, RefreshCw, Search, UsersRound } from 'lucide-react'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import type { MembershipStatus } from '../../types'
 import { loadAdminStudentMembers, updateMembershipStatusAsAdmin, type AdminStudentMember } from '../../services/adminStudents'
 import { getReaderLevel, getTermReaderRank } from '../../utils/readerLevels'
@@ -26,6 +27,10 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
   const [loading, setLoading] = useState(true)
   const [mutatingId, setMutatingId] = useState('')
   const [error, setError] = useState('')
+  const [statusConfirmation, setStatusConfirmation] = useState<{
+    member: AdminStudentMember
+    nextStatus: MembershipStatus
+  } | null>(null)
   const previousRefreshVersion = useRef(refreshVersion)
 
   async function load() {
@@ -64,9 +69,9 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  async function changeStatus(member: AdminStudentMember, nextStatus: MembershipStatus) {
-    if (nextStatus === member.status) return
-    if (!window.confirm(`เปลี่ยนสถานะสมาชิก ${member.displayName || member.studentId} เป็น “${statusLabels[nextStatus]}” หรือไม่?`)) return
+  async function changeStatus() {
+    if (!statusConfirmation) return
+    const { member, nextStatus } = statusConfirmation
     setMutatingId(member.studentId)
     setError('')
     try {
@@ -74,6 +79,7 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
       setMembers((current) => current.map((item) => item.studentId === member.studentId
         ? { ...item, status: nextStatus, updatedAt: new Date().toISOString() }
         : item))
+      setStatusConfirmation(null)
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'เปลี่ยนสถานะสมาชิกไม่สำเร็จ')
     } finally {
@@ -109,11 +115,29 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
                     <div><dt>เทอมนี้</dt><dd>{member.currentTermReadCount} เล่ม · {rank.name}</dd></div>
                     <div><dt>ยืมค้าง</dt><dd>{member.activeLoanCount}</dd></div>
                   </dl>
-                  <label>เปลี่ยนสถานะ<select value={member.status} disabled={mutatingId === member.studentId} onChange={(event) => void changeStatus(member, event.target.value as MembershipStatus)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  <label>เปลี่ยนสถานะ<select value={member.status} disabled={mutatingId === member.studentId} onChange={(event) => {
+                    const nextStatus = event.target.value as MembershipStatus
+                    if (nextStatus !== member.status) setStatusConfirmation({ member, nextStatus })
+                  }}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                 </article>
               )
             })}</div>}
       {filtered.length > PAGE_SIZE && <nav className="admin-pagination"><button className="button button--secondary button--small" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>ก่อนหน้า</button><span>หน้า {page} / {totalPages}</span><button className="button button--secondary button--small" disabled={page === totalPages} onClick={() => setPage((value) => value + 1)}>ถัดไป</button></nav>}
+      {statusConfirmation && (
+        <ConfirmationDialog
+          eyebrow="จัดการสมาชิก"
+          title={`เปลี่ยนสถานะ “${statusConfirmation.member.displayName || statusConfirmation.member.studentId}”`}
+          detail={`จาก “${statusLabels[statusConfirmation.member.status]}” เป็น “${statusLabels[statusConfirmation.nextStatus]}” ระบบจะใช้สถานะใหม่นี้ควบคุมสิทธิ์สร้างกิจกรรมของนักเรียน`}
+          confirmLabel="ยืนยันเปลี่ยนสถานะ"
+          cancelLabel="ยกเลิก"
+          icon={<UsersRound />}
+          tone={statusConfirmation.nextStatus === 'active' ? 'default' : 'danger'}
+          busy={mutatingId === statusConfirmation.member.studentId}
+          busyLabel="กำลังบันทึก"
+          onConfirm={() => void changeStatus()}
+          onCancel={() => setStatusConfirmation(null)}
+        />
+      )}
     </section>
   )
 }

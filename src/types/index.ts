@@ -37,6 +37,7 @@ export interface Category {
 
 export interface Profile {
   uid: string
+  avatarId?: string
   displayName: string
   className: string
   studentNumber: string
@@ -123,6 +124,7 @@ export interface BookRatingSummary {
 
 export interface Reader {
   uid: string
+  avatarId?: string
   displayName: string
   className: string
   readCount: number
@@ -202,10 +204,22 @@ export interface Loan {
   lastAuditId: string
 }
 
+export interface StudentNotification {
+  id: string
+  uid: string
+  type: 'loan_approved'
+  loanId: string
+  bookId: string
+  bookTitle: string
+  createdAt: string
+  readAt: string | null
+}
+
 export interface BookLoanLock {
   bookId: string
   loanId: string
   status: 'approved' | 'borrowed'
+  dueAt: string | null
   updatedAt: string
   lastAuditId: string
 }

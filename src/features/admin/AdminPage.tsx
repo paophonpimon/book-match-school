@@ -20,6 +20,7 @@ import {
 import type { User } from 'firebase/auth'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand } from '../../components/Brand'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import {
   ADMIN_EMAIL,
   calculateAdminBookStats,
@@ -80,6 +81,7 @@ export function AdminPage() {
   const [statusFilter, setStatusFilter] = useState<AdminBookStatusFilter>('all')
   const [page, setPage] = useState(1)
   const [mutatingId, setMutatingId] = useState('')
+  const [archiveConfirmation, setArchiveConfirmation] = useState<AdminBook | null>(null)
   const [activeSection, setActiveSection] = useState<AdminSection>('dashboard')
   const navigationTargetRef = useRef<AdminSection | null>(null)
   const navigationReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -246,7 +248,6 @@ export function AdminPage() {
   }
 
   async function mutateStatus(book: AdminBook, action: 'archive' | 'restore') {
-    if (action === 'archive' && !window.confirm(`ยืนยันซ่อนหนังสือ “${book.title}” ใช่หรือไม่?`)) return
     setMutatingId(book.id)
     setBooksError('')
     setMessage('')
@@ -255,6 +256,7 @@ export function AdminPage() {
       else await restoreBookAsAdmin(book.id)
       setMessage(action === 'archive' ? `ซ่อน “${book.title}” แล้ว` : `กู้คืน “${book.title}” แล้ว`)
       await loadBooks(false, false)
+      if (action === 'archive') setArchiveConfirmation(null)
     } catch (error) {
       setBooksError(error instanceof Error ? error.message : 'เปลี่ยนสถานะหนังสือไม่สำเร็จ')
     } finally {
@@ -411,7 +413,7 @@ export function AdminPage() {
                   <div className="admin-book-actions">
                     <button className="button button--secondary button--small" onClick={() => { setFormState({ mode: 'edit', book }); setMessage(''); setActiveSection('dashboard'); document.getElementById('dashboard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}><Pencil /> แก้ไข</button>
                     {book.active
-                      ? <button className="button button--secondary button--small" onClick={() => void mutateStatus(book, 'archive')} disabled={mutatingId === book.id}>{mutatingId === book.id ? <LoaderCircle className="spin" /> : <Archive />} ซ่อน</button>
+                      ? <button className="button button--secondary button--small" onClick={() => setArchiveConfirmation(book)} disabled={mutatingId === book.id}>{mutatingId === book.id ? <LoaderCircle className="spin" /> : <Archive />} ซ่อน</button>
                       : <button className="button button--secondary button--small" onClick={() => void mutateStatus(book, 'restore')} disabled={mutatingId === book.id}>{mutatingId === book.id ? <LoaderCircle className="spin" /> : <RotateCcw />} กู้คืน</button>}
                   </div>
                 </article>
@@ -429,6 +431,21 @@ export function AdminPage() {
         </section>
         </>}
       </div>
+      {archiveConfirmation && (
+        <ConfirmationDialog
+          eyebrow="จัดการหนังสือ"
+          title={`ซ่อน “${archiveConfirmation.title}” ใช่ไหม?`}
+          detail="หนังสือจะไม่แสดงให้นักเรียนเห็น แต่ข้อมูลเดิมทั้งหมดจะยังอยู่และสามารถกู้คืนได้ภายหลัง"
+          confirmLabel="ซ่อนหนังสือ"
+          cancelLabel="ยกเลิก"
+          icon={<Archive />}
+          tone="danger"
+          busy={mutatingId === archiveConfirmation.id}
+          busyLabel="กำลังซ่อน"
+          onConfirm={() => void mutateStatus(archiveConfirmation, 'archive')}
+          onCancel={() => setArchiveConfirmation(null)}
+        />
+      )}
     </main>
   )
 }

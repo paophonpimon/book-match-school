@@ -1,0 +1,19 @@
+{
+  "name": "Book Match: เล่มที่ใช่",
+  "short_name": "เล่มที่ใช่",
+  "description": "ค้นพบหนังสือที่ตรงกับอารมณ์ของคุณ",
+  "lang": "th",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbf5ea",
+  "theme_color": "#fbf5ea",
+  "icons": [
+    {
+      "src": "/assets/book-match/logos/book-match-app-icon.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

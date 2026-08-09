@@ -1,11 +1,23 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { CheckCircle2, X } from 'lucide-react'
 import { useApp } from '../app/AppContext'
 import { BottomNav } from './BottomNav'
 import { DemoBanner } from './DemoBanner'
 import { validateStudentProfile } from '../utils/profile'
 
 export function ProtectedShell() {
-  const { authUser, profile, membership, currentTerm, currentTermError, loading, levelUp, dismissLevelUp } = useApp()
+  const {
+    authUser,
+    profile,
+    membership,
+    currentTerm,
+    currentTermError,
+    loading,
+    levelUp,
+    loanApprovalToast,
+    dismissLevelUp,
+    dismissLoanApprovalToast,
+  } = useApp()
   const location = useLocation()
   if (loading) return <LoadingScreen />
   if (!authUser) return <Navigate to="/welcome" state={{ from: location.pathname }} replace />
@@ -28,14 +40,29 @@ export function ProtectedShell() {
       <DemoBanner />
       <main className="app-main"><Outlet /></main>
       <BottomNav />
+      {loanApprovalToast && (
+        <aside className="loan-approval-toast" role="status" aria-live="polite">
+          <CheckCircle2 aria-hidden="true" />
+          <span>
+            <strong>คำขอยืมได้รับการอนุมัติแล้ว</strong>
+            <small>{loanApprovalToast.bookTitle} พร้อมดำเนินการยืมต่อ</small>
+          </span>
+          <button type="button" onClick={dismissLoanApprovalToast} aria-label="ปิดข้อความแจ้งเตือน"><X /></button>
+        </aside>
+      )}
       {levelUp && (
         <div className="dialog-backdrop" role="presentation">
           <section className="level-up-dialog" role="dialog" aria-modal="true" aria-labelledby="level-up-title">
-            <span aria-hidden="true">✨</span>
-            <p className="eyebrow">เลเวลใหม่</p>
+            <span className="level-up-dialog__spark level-up-dialog__spark--left" aria-hidden="true">✦</span>
+            <span className="level-up-dialog__spark level-up-dialog__spark--right" aria-hidden="true">✦</span>
+            <div className="level-up-dialog__art" aria-hidden="true">
+              <img src="/assets/book-match/profile/profile-level-book.png" alt="" />
+              <strong>{levelUp.level}</strong>
+            </div>
+            <p className="eyebrow">ปลดล็อกเลเวลใหม่</p>
             <h2 id="level-up-title">เลเวล {levelUp.level} — {levelUp.name}</h2>
-            <p>ยอดเยี่ยม! การอ่านเล่มล่าสุดพาคุณขึ้นสู่ระดับใหม่แล้ว</p>
-            <button className="button button--primary" type="button" onClick={dismissLevelUp}>รับทราบ</button>
+            <p className="level-up-dialog__message">ยอดเยี่ยม! การอ่านเล่มล่าสุดพาคุณขึ้นสู่ระดับใหม่แล้ว</p>
+            <button className="button button--primary button--wide" type="button" onClick={dismissLevelUp}>รับทราบ</button>
           </section>
         </div>
       )}

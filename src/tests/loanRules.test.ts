@@ -7,6 +7,7 @@ const adminAuth = readFileSync(resolve(process.cwd(), 'src/services/adminAuth.ts
 const adminPage = readFileSync(resolve(process.cwd(), 'src/features/admin/AdminPage.tsx'), 'utf8')
 const adminLoans = readFileSync(resolve(process.cwd(), 'src/features/admin/AdminLoanManagement.tsx'), 'utf8')
 const firebaseService = readFileSync(resolve(process.cwd(), 'src/services/firebase.ts'), 'utf8')
+const bookDetail = readFileSync(resolve(process.cwd(), 'src/features/discovery/BookDetailPage.tsx'), 'utf8')
 
 describe('loan Firestore security boundary', () => {
   it('keeps the exact verified Admin identity check', () => {
@@ -39,6 +40,22 @@ describe('loan Firestore security boundary', () => {
     expect(rules).toContain('function activeKeyMatchesLoan()')
     expect(rules).toContain('function bookLoanLockMatchesLoan(bookId)')
     expect(rules).toContain('loan.lastAuditId == request.resource.data.lastAuditId')
+    expect(rules).toContain('loan.dueAt == request.resource.data.dueAt')
+    expect(rules).toContain("request.resource.data.status == 'borrowed' && request.resource.data.dueAt is timestamp")
+  })
+
+  it('publishes only the due date in a borrowed lock, without borrower profile fields', () => {
+    const lockSchema = rules.slice(rules.indexOf('function validBookLoanLock'), rules.indexOf('function bookLoanLockMatchesLoan'))
+    expect(lockSchema).toContain("'bookId', 'loanId', 'status', 'dueAt', 'updatedAt', 'lastAuditId'")
+    expect(lockSchema).not.toContain('studentId')
+    expect(lockSchema).not.toContain('uid')
+  })
+
+  it('distinguishes a reservation from a real borrowing and offers save-for-later', () => {
+    expect(bookDetail).toContain("bookLock.status === 'approved'")
+    expect(bookDetail).toContain('แต่ยังไม่ได้รับหนังสือจากห้องสมุด')
+    expect(bookDetail).toContain('กำหนดคืน ${formatThaiLoanDate(bookLock.dueAt)}')
+    expect(bookDetail).toContain('<Bookmark /> เก็บไว้ก่อน')
   })
 
   it('keeps Admin loan updates narrow without a broad write grant', () => {

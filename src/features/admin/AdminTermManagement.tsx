@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import type { AcademicTerm, LoanStatus } from '../../types'
 import {
   activateTermAsAdmin,
@@ -34,6 +35,8 @@ const loanLabels: Record<LoanStatus, string> = {
   cancelled: 'ยกเลิก',
 }
 
+type TermAction = 'activate' | 'close' | 'remove'
+
 interface AdminTermManagementProps {
   refreshVersion?: number
   onRefreshComplete?: () => void
@@ -47,6 +50,7 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
   const [message, setMessage] = useState('')
   const [report, setReport] = useState<TermReport | null>(null)
   const [reportLoadingId, setReportLoadingId] = useState('')
+  const [termConfirmation, setTermConfirmation] = useState<{ term: AcademicTerm; action: TermAction } | null>(null)
   const previousRefreshVersion = useRef(refreshVersion)
   const [form, setForm] = useState({
     id: '',
@@ -95,8 +99,6 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
   }
 
   async function activate(term: AcademicTerm) {
-    const verb = term.status === 'closed' ? 'เปิดใช้อีกครั้ง' : 'เปิดใช้'
-    if (!window.confirm(`${confirmation}\n\nยืนยัน${verb} “${term.name}” หรือไม่?`)) return
     setSavingId(term.id)
     setError('')
     setMessage('')
@@ -104,6 +106,7 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
       await activateTermAsAdmin(term.id)
       setMessage(`เปิดใช้ ${term.name} เป็นภาคเรียนปัจจุบันแล้ว`)
       await load()
+      setTermConfirmation(null)
     } catch (activateError) {
       setError(activateError instanceof Error ? activateError.message : 'เปลี่ยนภาคเรียนไม่สำเร็จ')
     } finally {
@@ -112,7 +115,6 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
   }
 
   async function close(term: AcademicTerm) {
-    if (!window.confirm(`ยืนยันปิด “${term.name}” หรือไม่?\n\nข้อมูลเดิมจะยังอยู่และเรียกดูรายงานได้ แต่นักเรียนจะสร้างกิจกรรมใหม่ไม่ได้จนกว่าจะเปิดภาคเรียนอีกครั้ง`)) return
     setSavingId(term.id)
     setError('')
     setMessage('')
@@ -120,6 +122,7 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
       await closeTermAsAdmin(term.id)
       setMessage(`ปิด ${term.name} แล้ว ข้อมูลย้อนหลังยังคงอยู่`)
       await load()
+      setTermConfirmation(null)
     } catch (closeError) {
       setError(closeError instanceof Error ? closeError.message : 'ปิดภาคเรียนไม่สำเร็จ')
     } finally {
@@ -128,7 +131,6 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
   }
 
   async function remove(term: AcademicTerm) {
-    if (!window.confirm(`ลบภาคเรียนร่าง “${term.name}” หรือไม่?\n\nลบได้เฉพาะภาคเรียนที่ยังไม่เคยเปิดใช้งาน`)) return
     setSavingId(term.id)
     setError('')
     setMessage('')
@@ -137,6 +139,7 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
       if (report?.term.id === term.id) setReport(null)
       setMessage(`ลบภาคเรียนร่าง ${term.id} แล้ว`)
       await load()
+      setTermConfirmation(null)
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'ลบภาคเรียนไม่สำเร็จ')
     } finally {
@@ -206,16 +209,16 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
                   {reportLoadingId === term.id ? <LoaderCircle className="spin" /> : <BarChart3 />} ดูสรุป
                 </button>
                 {term.status === 'active' ? (
-                  <button className="button button--secondary button--small button--danger" type="button" disabled={Boolean(savingId)} onClick={() => void close(term)}>
+                  <button className="button button--secondary button--small button--danger" type="button" disabled={Boolean(savingId)} onClick={() => setTermConfirmation({ term, action: 'close' })}>
                     {savingId === term.id ? <LoaderCircle className="spin" /> : <LockKeyhole />} ปิดภาคเรียน
                   </button>
                 ) : (
-                  <button className="button button--secondary button--small" type="button" disabled={Boolean(savingId)} onClick={() => void activate(term)}>
+                  <button className="button button--secondary button--small" type="button" disabled={Boolean(savingId)} onClick={() => setTermConfirmation({ term, action: 'activate' })}>
                     {savingId === term.id ? <LoaderCircle className="spin" /> : <Play />} {term.status === 'closed' ? 'เปิดใช้อีกครั้ง' : 'เปิดใช้งาน'}
                   </button>
                 )}
                 {term.status === 'draft' && (
-                  <button className="button button--secondary button--small button--danger" type="button" disabled={Boolean(savingId)} onClick={() => void remove(term)}>
+                  <button className="button button--secondary button--small button--danger" type="button" disabled={Boolean(savingId)} onClick={() => setTermConfirmation({ term, action: 'remove' })}>
                     <Trash2 /> ลบร่าง
                   </button>
                 )}
@@ -224,6 +227,35 @@ export function AdminTermManagement({ refreshVersion = 0, onRefreshComplete }: A
           ))}</div>}
 
       {report && <TermReportView report={report} onDownloadCsv={downloadCsv} />}
+      {termConfirmation && (
+        <ConfirmationDialog
+          eyebrow="จัดการภาคเรียน"
+          title={termConfirmation.action === 'activate'
+            ? `${termConfirmation.term.status === 'closed' ? 'เปิดใช้อีกครั้ง' : 'เปิดใช้'} “${termConfirmation.term.name}” ใช่ไหม?`
+            : termConfirmation.action === 'close'
+              ? `ปิด “${termConfirmation.term.name}” ใช่ไหม?`
+              : `ลบภาคเรียนร่าง “${termConfirmation.term.name}” ใช่ไหม?`}
+          detail={termConfirmation.action === 'activate'
+            ? confirmation
+            : termConfirmation.action === 'close'
+              ? 'ข้อมูลเดิมและรายงานจะยังอยู่ครบ แต่นักเรียนจะสร้างกิจกรรมใหม่ไม่ได้จนกว่าจะเปิดภาคเรียนอีกครั้ง'
+              : 'ลบได้เฉพาะภาคเรียนร่างที่ยังไม่เคยเปิดใช้งาน การดำเนินการนี้ย้อนกลับไม่ได้'}
+          confirmLabel={termConfirmation.action === 'activate'
+            ? (termConfirmation.term.status === 'closed' ? 'เปิดใช้อีกครั้ง' : 'เปิดใช้งาน')
+            : termConfirmation.action === 'close' ? 'ปิดภาคเรียน' : 'ลบภาคเรียนร่าง'}
+          cancelLabel="ยกเลิก"
+          icon={termConfirmation.action === 'activate' ? <Play /> : termConfirmation.action === 'close' ? <LockKeyhole /> : <Trash2 />}
+          tone={termConfirmation.action === 'activate' ? 'default' : 'danger'}
+          busy={savingId === termConfirmation.term.id}
+          busyLabel="กำลังบันทึก"
+          onConfirm={() => {
+            if (termConfirmation.action === 'activate') void activate(termConfirmation.term)
+            else if (termConfirmation.action === 'close') void close(termConfirmation.term)
+            else void remove(termConfirmation.term)
+          }}
+          onCancel={() => setTermConfirmation(null)}
+        />
+      )}
     </section>
   )
 }

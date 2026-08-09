@@ -69,10 +69,11 @@ service cloud.firestore {
 
     function validProfile(uid) {
       return request.resource.data.keys().hasOnly([
-          'uid', 'displayName', 'className', 'studentNumber', 'studentId', 'firstName',
+          'uid', 'avatarId', 'displayName', 'className', 'studentNumber', 'studentId', 'firstName',
           'lastName', 'gradeLevel', 'interests', 'createdAt', 'lastActiveAt'
         ])
         && request.resource.data.uid == uid
+        && request.resource.data.avatarId.matches('^avatar-(boy|girl)-0[1-5]$')
         && shortText(request.resource.data.displayName, 2, 40)
         && shortText(request.resource.data.className, 1, 20)
         && shortText(request.resource.data.studentNumber, 1, 20)
@@ -308,14 +309,17 @@ service cloud.firestore {
     }
 
     function validProgress(recordId) {
+      let profilePath = /databases/$(database)/documents/profiles/$(request.resource.data.uid);
       return request.resource.data.keys().hasOnly([
-          'uid', 'termId', 'displayName', 'className', 'readCount', 'likedCount',
+          'uid', 'termId', 'avatarId', 'displayName', 'className', 'readCount', 'likedCount',
           'eligible', 'lastReadAt', 'updatedAt'
         ])
         && activeMemberAfter(request.resource.data.uid)
         && recordId == request.resource.data.termId + '_' + request.resource.data.uid
         && request.resource.data.termId == currentTermId()
         && shortText(request.resource.data.termId, 1, 40)
+        && request.resource.data.avatarId.matches('^avatar-(boy|girl)-0[1-5]$')
+        && request.resource.data.avatarId == getAfter(profilePath).data.get('avatarId', 'avatar-boy-01')
         && shortText(request.resource.data.displayName, 2, 40)
         && shortText(request.resource.data.className, 1, 20)
         && request.resource.data.readCount is int
@@ -336,7 +340,7 @@ service cloud.firestore {
       allow update: if validProgress(recordId)
         && request.resource.data.eligible == resource.data.eligible
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'displayName', 'className', 'readCount', 'likedCount', 'lastReadAt', 'updatedAt'
+          'avatarId', 'displayName', 'className', 'readCount', 'likedCount', 'lastReadAt', 'updatedAt'
         ])
         && request.resource.data.readCount >= resource.data.readCount
         && request.resource.data.readCount <= resource.data.readCount + 1
@@ -906,11 +910,13 @@ service cloud.firestore {
 
     function validBookLoanLock(bookId) {
       return request.resource.data.keys().hasOnly([
-          'bookId', 'loanId', 'status', 'updatedAt', 'lastAuditId'
+          'bookId', 'loanId', 'status', 'dueAt', 'updatedAt', 'lastAuditId'
         ])
         && request.resource.data.bookId == bookId
         && shortText(request.resource.data.loanId, 1, 128)
         && request.resource.data.status in ['approved', 'borrowed']
+        && ((request.resource.data.status == 'approved' && request.resource.data.dueAt == null)
+          || (request.resource.data.status == 'borrowed' && request.resource.data.dueAt is timestamp))
         && request.resource.data.updatedAt == request.time
         && shortText(request.resource.data.lastAuditId, 1, 128);
     }
@@ -921,6 +927,7 @@ service cloud.firestore {
       return existsAfter(loanPath)
         && loan.bookId == bookId
         && loan.status == request.resource.data.status
+        && loan.dueAt == request.resource.data.dueAt
         && loan.lastAuditId == request.resource.data.lastAuditId;
     }
 
@@ -1016,6 +1023,44 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if signedIn() && validLoanAuditCreate(auditId);
       allow update, delete: if false;
+    }
+
+    function validLoanApprovedNotification(notificationId) {
+      let loanPath = /databases/$(database)/documents/loans/$(request.resource.data.loanId);
+      let loan = getAfter(loanPath).data;
+      return isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'type', 'loanId', 'bookId', 'bookTitle', 'createdAt', 'readAt'
+        ])
+        && notificationId == request.resource.data.loanId
+        && request.resource.data.type == 'loan_approved'
+        && shortText(request.resource.data.uid, 1, 128)
+        && shortText(request.resource.data.loanId, 1, 128)
+        && shortText(request.resource.data.bookId, 1, 128)
+        && shortText(request.resource.data.bookTitle, 1, 300)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.readAt == null
+        && existsAfter(loanPath)
+        && loan.uid == request.resource.data.uid
+        && loan.bookId == request.resource.data.bookId
+        && loan.bookTitle == request.resource.data.bookTitle
+        && loan.status == 'approved'
+        && loan.approvedAt == request.time
+        && loan.updatedAt == request.time;
+    }
+
+    function validStudentNotificationRead() {
+      return owns(resource.data.uid)
+        && resource.data.readAt == null
+        && request.resource.data.readAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+    }
+
+    match /studentNotifications/{notificationId} {
+      allow get, list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if validLoanApprovedNotification(notificationId);
+      allow update: if validStudentNotificationRead();
+      allow delete: if false;
     }
 
     function validBookCore(bookId) {
