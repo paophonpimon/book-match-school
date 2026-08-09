@@ -74,7 +74,7 @@ describe('liked book transaction', () => {
 
   it('keeps the progress and bookStats field allowlists aligned with the rules', () => {
     expect([...progressWriteFields].sort()).toEqual([
-      'uid', 'termId', 'avatarId', 'displayName', 'className', 'readCount', 'likedCount',
+      'uid', 'termId', 'avatarId', 'firstName', 'lastName', 'displayName', 'className', 'readCount', 'likedCount',
       'eligible', 'lastReadAt', 'updatedAt',
     ].sort())
     expect([...bookStatsWriteFields].sort()).toEqual([

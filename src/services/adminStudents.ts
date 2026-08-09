@@ -4,7 +4,6 @@ import {
   documentId,
   getDocFromServer,
   getDocsFromServer,
-  limit,
   orderBy,
   query,
   runTransaction,
@@ -67,12 +66,11 @@ function membershipFrom(snapshot: QueryDocumentSnapshot<DocumentData>): StudentM
   }
 }
 
-export async function loadAdminStudentMembers(maxResults = 100): Promise<AdminStudentMember[]> {
+export async function loadAdminStudentMembers(): Promise<AdminStudentMember[]> {
   const { firestore } = getAdminFirebaseContext()
   const membershipSnapshot = await getDocsFromServer(query(
     collection(firestore, 'studentMemberships'),
     orderBy('createdAt', 'desc'),
-    limit(maxResults),
   ))
   const memberships = membershipSnapshot.docs.map(membershipFrom)
   const currentTermSnapshot = await getDocFromServer(doc(firestore, 'settings', 'currentTerm'))

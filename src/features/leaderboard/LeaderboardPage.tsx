@@ -17,17 +17,28 @@ const podiumPlaces = [
   { sourceIndex: 2, rank: 3, medal: 'rank-medal-bronze.png' },
 ] as const
 
+function readerNickname(reader: Pick<Reader, 'displayName'>) {
+  return reader.displayName.trim()
+}
+
+function readerFullName(reader: Pick<Reader, 'firstName' | 'lastName' | 'displayName'>) {
+  return [reader.firstName?.trim(), reader.lastName?.trim()].filter(Boolean).join(' ') || readerNickname(reader)
+}
+
 function PodiumReader({ reader, rank, medal }: { reader: Reader; rank: 1 | 2 | 3; medal: string }) {
+  const nickname = readerNickname(reader)
+  const fullName = readerFullName(reader)
   return (
-    <article className={`leaderboard-podium__card leaderboard-podium__card--${rank}`} aria-label={`อันดับ ${rank} ${reader.displayName}`}>
+    <article className={`leaderboard-podium__card leaderboard-podium__card--${rank}`} aria-label={`อันดับ ${rank} ${nickname} ${fullName}`}>
       {rank === 1 && <img className="leaderboard-podium__crown" src={`${leaderboardAssets}/rank-crown.png`} alt="" aria-hidden="true" />}
       <img className="leaderboard-podium__medal" src={`${leaderboardAssets}/${medal}`} alt="" aria-hidden="true" />
       <div className="leaderboard-podium__avatar-wrap">
         <img className="leaderboard-podium__laurel" src={`${leaderboardAssets}/rank-laurel-pair.png`} alt="" aria-hidden="true" />
         <img className="reader-avatar" src={studentAvatarSrc(reader.avatarId)} alt="" />
       </div>
-      <strong title={reader.displayName}>{reader.displayName}</strong>
-      <small>{reader.className}</small>
+      <strong className="leaderboard-podium__nickname" title={nickname}>{nickname}</strong>
+      <small className="leaderboard-podium__real-name" title={fullName}>{fullName}</small>
+      <small className="leaderboard-podium__class">{reader.className}</small>
       <span>{getTermReaderRank(reader.readCount).name}</span>
       <b>{reader.readCount} เล่ม</b>
       {rank === 1 && <img className="leaderboard-podium__winner-base" src={`${leaderboardAssets}/rank-first-place-base.png`} alt="" aria-hidden="true" />}
@@ -59,7 +70,7 @@ export function LeaderboardPage() {
     const safeReaders = readers.filter((reader) => isSafeProfileDisplayName(reader.displayName))
     if (!profile || safeReaders.some((reader) => reader.uid === profile.uid)) return sortLeaderboard(safeReaders)
     const lastReadAt = Object.values(userBooks).filter((item) => item.status === 'read' && item.readAt).map((item) => item.readAt!).sort().at(-1) ?? null
-    return sortLeaderboard([...safeReaders, { uid: profile.uid, avatarId: profile.avatarId, displayName: profile.displayName, className: profile.className, readCount: myReads, likedCount: 0, eligible: true, lastReadAt }])
+    return sortLeaderboard([...safeReaders, { uid: profile.uid, avatarId: profile.avatarId, firstName: profile.firstName, lastName: profile.lastName, displayName: profile.displayName, className: profile.className, readCount: myReads, likedCount: 0, eligible: true, lastReadAt }])
   }, [readers, profile, myReads, userBooks])
   const filtered = scope === 'class' ? merged.filter((reader) => reader.className === profile?.className) : merged
   const myRank = merged.findIndex((reader) => reader.uid === profile?.uid) + 1
@@ -97,7 +108,7 @@ export function LeaderboardPage() {
 
           <section className="my-rank" aria-label="อันดับของฉัน">
             <img src={`${leaderboardAssets}/rank-trophy.png`} alt="" aria-hidden="true" />
-            <span><small>อันดับของฉัน</small><strong>{profile?.displayName} · {profile?.className}</strong></span>
+            <span><small>อันดับของฉัน</small><strong>{profile ? readerNickname(profile) : ''} · {profile?.className}</strong></span>
             <b>#{myRank || merged.length + 1}</b>
             <em>{myReads} เล่ม</em>
           </section>
@@ -112,7 +123,11 @@ export function LeaderboardPage() {
                 <article key={reader.uid} className={reader.uid === profile?.uid ? 'current' : ''}>
                   <span className={`ranking-list__position ranking-list__position--${Math.min(index + 1, 4)}`}>{index + 1}</span>
                   <img className="reader-avatar reader-avatar--small" src={studentAvatarSrc(reader.avatarId)} alt="" />
-                  <div className="ranking-list__reader"><strong>{reader.displayName}</strong><small>{reader.className} · {getTermReaderRank(reader.readCount).name}</small></div>
+                  <div className="ranking-list__reader">
+                    <strong>{readerNickname(reader)}</strong>
+                    <small className="ranking-list__real-name">{readerFullName(reader)}</small>
+                    <small>{reader.className} · {getTermReaderRank(reader.readCount).name}</small>
+                  </div>
                   <b><BookOpen aria-hidden="true" /> {reader.readCount} <small>เล่ม</small></b>
                 </article>
               ))}

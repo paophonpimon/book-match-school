@@ -7,7 +7,7 @@ export const userBookWriteFields = [
 ] as const
 
 export const progressWriteFields = [
-  'uid', 'termId', 'avatarId', 'displayName', 'className', 'readCount', 'likedCount',
+  'uid', 'termId', 'avatarId', 'firstName', 'lastName', 'displayName', 'className', 'readCount', 'likedCount',
   'eligible', 'lastReadAt', 'updatedAt',
 ] as const
 

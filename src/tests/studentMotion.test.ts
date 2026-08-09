@@ -20,6 +20,11 @@ describe('student interface motion', () => {
     expect(css).toContain('transition-duration: .01ms !important')
   })
 
+  it('reduces expensive decorative motion on touch devices', () => {
+    expect(css).toContain('@media (hover: none) and (pointer: coarse)')
+    expect(css).toContain('.leaderboard-podium__laurel { animation: none; }')
+  })
+
   it('does not target the admin interface', () => {
     const motionSection = css.split('/* Gentle motion for student-facing pages */')[1]
     expect(motionSection).not.toContain('.admin-')

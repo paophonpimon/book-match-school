@@ -125,6 +125,8 @@ export interface BookRatingSummary {
 export interface Reader {
   uid: string
   avatarId?: string
+  firstName?: string
+  lastName?: string
   displayName: string
   className: string
   readCount: number

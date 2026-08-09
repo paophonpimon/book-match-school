@@ -29,6 +29,8 @@ describe('student profile avatars', () => {
     expect(setup).toContain('studentAvatars.map')
     expect(setup).toContain('setAvatarId(avatar.id)')
     expect(setup).toContain('avatarId,')
+    expect(setup).toContain('กรุณาเลือกอวตารประจำตัวก่อนสมัครสมาชิก')
+    expect(setup).toContain('profile?.avatarId ? normalizeStudentAvatarId(profile.avatarId) : null')
     expect(profile).toContain('aria-label="เปลี่ยนอวตาร"')
     expect(profile).toContain("navigate('/setup')")
   })
@@ -49,8 +51,8 @@ describe('student profile avatars', () => {
 
   it('restricts profile and leaderboard avatar values in Firestore rules', () => {
     expect(rules).toContain("request.resource.data.avatarId.matches('^avatar-(boy|girl)-0[1-5]$')")
-    expect(rules).toContain("getAfter(profilePath).data.get('avatarId', 'avatar-boy-01')")
-    expect(rules).toContain("'avatarId', 'displayName', 'className'")
+    expect(rules).toContain("profile.get('avatarId', 'avatar-boy-01')")
+    expect(rules).toContain("'avatarId', 'firstName', 'lastName', 'displayName', 'className'")
   })
 
   it('distinguishes an existing-profile Rules mismatch from duplicate registration', () => {

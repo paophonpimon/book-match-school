@@ -1,7 +1,6 @@
 import { LoaderCircle, ShieldCheck, UserRoundCheck } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
-import { Brand } from '../../components/Brand'
 import { LoadingScreen } from '../../components/AppShell'
 import { getStudentEntryRoute } from '../../utils/studentRouting'
 import welcomeBookArt from '../../../img/logo-book.webp'
@@ -48,7 +47,13 @@ export function WelcomePage() {
       <div className="welcome-botanical welcome-botanical--bottom" aria-hidden="true"><i /><i /><i /></div>
       <div className="welcome-flower" aria-hidden="true">✿</div>
       <section className="welcome-card">
-        <Brand />
+        <img
+          className="welcome-wordmark"
+          src="/assets/book-match/logos/book-match-wordmark.webp"
+          alt="เล่มที่ใช่ Book Match"
+          fetchPriority="high"
+          decoding="async"
+        />
         <div className="welcome-art" aria-hidden="true"><img src={welcomeBookArt} alt="" fetchPriority="high" decoding="async" /></div>
         <div className="welcome-heading">
           <p><span>✦</span> ค้นพบหนังสือที่ตรงกับคุณ <span>✦</span></p>

@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { CheckCircle2, X } from 'lucide-react'
+import { BookHeart, CheckCircle2, X } from 'lucide-react'
 import { useApp } from '../app/AppContext'
 import { BottomNav } from './BottomNav'
 import { DemoBanner } from './DemoBanner'
@@ -72,10 +72,13 @@ export function ProtectedShell() {
 
 export function LoadingScreen() {
   return (
-    <div className="loading-screen" aria-live="polite">
-      <div className="skeleton skeleton--logo" />
-      <div className="skeleton skeleton--title" />
-      <div className="skeleton skeleton--card" />
+    <div className="loading-screen" role="status" aria-live="polite" aria-label="กำลังโหลด Book Match">
+      <div className="loading-screen__glow" aria-hidden="true" />
+      <div className="loading-screen__mark" aria-hidden="true"><BookHeart /></div>
+      <strong>กำลังเปิดเล่มที่ใช่</strong>
+      <p>เตรียมหนังสือและข้อมูลนักอ่านของคุณสักครู่</p>
+      <div className="loading-screen__progress" aria-hidden="true"><span /></div>
+      <div className="loading-screen__books" aria-hidden="true"><i /><i /><i /><i /></div>
     </div>
   )
 }

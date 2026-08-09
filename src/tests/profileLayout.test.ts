@@ -45,6 +45,15 @@ describe('student profile visual structure', () => {
     expect(page).toContain('profile-term-medal-books.png')
   })
 
+  it('keeps the term medal in sync with the real rank and centers mobile statistics', () => {
+    expect(page).toContain('term-rank-card__rank--${termRank.key}')
+    expect(page).toContain('className="term-rank-card__medal"')
+    expect(css).toContain('.term-rank-card__rank--silver .term-rank-card__medal')
+    expect(css).toContain('.term-rank-card__rank--diamond .term-rank-card__medal')
+    expect(css).toContain('.profile-stat strong { align-self: center;')
+    expect(css).toContain('.profile-stat small { align-self: center;')
+  })
+
   it('has scoped mobile, short-width, and desktop profile treatments', () => {
     expect(css).toContain('/* Student profile — Stage 4 */')
     expect(css).toContain('.profile-hero {')

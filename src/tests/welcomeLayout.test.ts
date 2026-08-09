@@ -21,9 +21,18 @@ describe('welcome page visual structure', () => {
   })
 
   it('keeps the brand and supplied artwork visually prominent', () => {
-    expect(styles).toContain('.welcome-card > .brand { transform: scale(1.03)')
+    expect(pageSource).toContain('/assets/book-match/logos/book-match-wordmark.webp')
+    expect(styles).toContain('.welcome-wordmark { width: clamp(190px, 52vw, 240px)')
     expect(styles).toContain('width: clamp(178px, 49vw, 218px)')
     expect(styles).toContain('.welcome-art { width: 164px')
+  })
+
+  it('adds gentle accessible motion to the welcome artwork and sign-in call to action', () => {
+    expect(styles).toContain('.welcome-art img { animation: student-float')
+    expect(styles).toContain('.welcome-spark { animation: student-twinkle')
+    expect(styles).toContain('.welcome-google-button:not(:disabled) { animation: welcome-cta-glow')
+    expect(styles).toContain('@keyframes welcome-flower-sway')
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)')
   })
 
   it('uses Book Match: เล่มที่ใช่ as the project name', () => {

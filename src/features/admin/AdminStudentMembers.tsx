@@ -66,6 +66,12 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
         && (status === 'all' || member.status === status)
     })
   }, [classroom, members, search, status])
+  const summary = useMemo(() => ({
+    total: members.length,
+    active: members.filter((member) => member.status === 'active').length,
+    suspended: members.filter((member) => member.status === 'suspended').length,
+    inactive: members.filter((member) => member.status === 'graduated' || member.status === 'transferred').length,
+  }), [members])
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
@@ -90,8 +96,14 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
   return (
     <section className="dashboard-card admin-members" id="student-members">
       <div className="section-heading">
-        <div><p className="eyebrow">สมาชิกถาวร</p><h2><UsersRound /> สมาชิกนักเรียน</h2><p>แสดงสูงสุด 100 บัญชีล่าสุด</p></div>
+        <div><p className="eyebrow">สมาชิกถาวร</p><h2><UsersRound /> รายชื่อนักเรียนที่สมัครแล้ว</h2><p>แสดงสมาชิกทุกบัญชี แบ่งหน้าละ {PAGE_SIZE} รายการ</p></div>
         <button className="button button--secondary button--small" type="button" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} /> รีเฟรช</button>
+      </div>
+      <div className="admin-member-summary" aria-label="สรุปสมาชิกนักเรียน">
+        <article><strong>{summary.total.toLocaleString('th-TH')}</strong><span>สมัครทั้งหมด</span></article>
+        <article><strong>{summary.active.toLocaleString('th-TH')}</strong><span>กำลังใช้งาน</span></article>
+        <article><strong>{summary.suspended.toLocaleString('th-TH')}</strong><span>ระงับชั่วคราว</span></article>
+        <article><strong>{summary.inactive.toLocaleString('th-TH')}</strong><span>จบ/ย้ายสถานศึกษา</span></article>
       </div>
       <div className="admin-filters">
         <label className="admin-search"><Search /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="ค้นหาชื่อหรือเลขประจำตัวนักเรียน" /></label>
@@ -99,6 +111,7 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
         <label><span>สถานะ</span><select value={status} onChange={(event) => { setStatus(event.target.value as MembershipStatus | 'all'); setPage(1) }}><option value="all">ทุกสถานะ</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
+      {!loading && !error && <p className="admin-member-result-count">แสดง {filtered.length.toLocaleString('th-TH')} จาก {members.length.toLocaleString('th-TH')} คน</p>}
       {loading ? <div className="admin-list-state"><LoaderCircle className="spin" /><p>กำลังโหลดสมาชิก…</p></div>
         : visible.length === 0 ? <div className="admin-list-state"><UsersRound /><p>ไม่พบสมาชิกตามเงื่อนไข</p></div>
           : <div className="admin-member-list">{visible.map((member) => {

@@ -8,9 +8,34 @@ const index = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
 
 describe('initial loading performance', () => {
   it('loads non-entry routes on demand', () => {
-    expect(app).toContain("lazy(() => import('../features/admin/AdminPage')")
-    expect(app).toContain("lazy(() => import('../features/home/HomePage')")
+    expect(app).toContain("const loadAdminPage = () => import('../features/admin/AdminPage')")
+    expect(app).toContain("const loadHomePage = () => import('../features/home/HomePage')")
+    expect(app).toContain("const HomePage = lazyNamed(loadHomePage, 'HomePage')")
     expect(app).toContain('<Suspense fallback={<LoadingScreen />}>')
+  })
+
+  it('prefetches common student routes after first paint without prefetching Admin', () => {
+    expect(app).toContain('function StudentRoutePreloader()')
+    expect(app).toContain('Promise.allSettled([loadHomePage(), loadMoodPage(), loadDiscoverPage(), loadShelfPage(), loadLeaderboardPage(), loadProfilePage()])')
+    expect(app).toContain("connection?.effectiveType?.includes('2g')")
+    const preloader = app.split('function StudentRoutePreloader()')[1].split('function ScrollToTop()')[0]
+    expect(preloader).not.toContain('loadAdminPage()')
+  })
+
+  it('recovers once from stale lazy chunks after a new deployment', () => {
+    expect(app).toContain("const CHUNK_RELOAD_KEY = 'book-match:chunk-reload'")
+    expect(app).toContain('isChunkLoadError(error)')
+    expect(app).toContain('window.location.reload()')
+  })
+
+  it('uses a branded animated loading state instead of an empty pale screen', () => {
+    const shell = readFileSync(resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf8')
+    const styles = readFileSync(resolve(process.cwd(), 'src/styles/global.css'), 'utf8')
+    expect(shell).toContain('กำลังเปิดเล่มที่ใช่')
+    expect(shell).toContain('loading-screen__progress')
+    expect(shell).toContain('loading-screen__books')
+    expect(styles).toContain('@keyframes route-loader-progress')
+    expect(styles).toContain('min-height: 100dvh')
   })
 
   it('uses compact WebP artwork for the critical welcome screen', () => {

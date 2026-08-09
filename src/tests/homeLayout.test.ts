@@ -41,6 +41,7 @@ describe('student home visual structure', () => {
     expect(css).toContain('@media (min-width: 700px)')
     expect(css).toContain('@media (max-width: 370px)')
     expect(css).toContain('.home-hero__art')
+    expect(css).toContain('background: linear-gradient(135deg, #47a56f, #287b50)')
     expect(css).not.toContain('.home-start-card')
   })
 

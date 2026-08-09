@@ -17,7 +17,7 @@ export function ProfileSetupPage() {
     ? location.state.profileError
     : ''
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '')
-  const [avatarId, setAvatarId] = useState<StudentAvatarId>(normalizeStudentAvatarId(profile?.avatarId))
+  const [avatarId, setAvatarId] = useState<StudentAvatarId | null>(profile?.avatarId ? normalizeStudentAvatarId(profile.avatarId) : null)
   const [studentId, setStudentId] = useState(profile?.studentId ?? '')
   const [firstName, setFirstName] = useState(profile?.firstName ?? '')
   const [lastName, setLastName] = useState(profile?.lastName ?? '')
@@ -32,6 +32,10 @@ export function ProfileSetupPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (!avatarId) {
+      setError('กรุณาเลือกอวตารประจำตัวก่อนสมัครสมาชิก')
+      return
+    }
     const values = { studentId, firstName, lastName, gradeLevel, studentNumber, displayName }
     const validationError = validateStudentProfile(values)
     if (validationError) {
@@ -79,8 +83,8 @@ export function ProfileSetupPage() {
         )}
         <form onSubmit={submit} noValidate>
           <fieldset className="avatar-picker">
-            <legend>เลือกอวตารประจำตัว</legend>
-            <p>เลือกแบบที่เป็นคุณ เปลี่ยนใหม่ได้ตลอดจากหน้าโปรไฟล์</p>
+            <legend>{profile ? 'เลือกอวตารประจำตัว' : 'เลือกอวตารเพื่อเริ่มใช้งาน'}</legend>
+            <p>{profile ? 'เลือกแบบที่เป็นคุณ เปลี่ยนใหม่ได้ตลอดจากหน้าโปรไฟล์' : 'เลือกอวตารของคุณก่อนกรอกข้อมูลสมัครสมาชิก เปลี่ยนใหม่ได้ภายหลัง'}</p>
             <div className="avatar-picker__grid">
               {studentAvatars.map((avatar) => {
                 const selected = avatar.id === avatarId
@@ -93,7 +97,7 @@ export function ProfileSetupPage() {
                     aria-pressed={selected}
                     onClick={() => setAvatarId(avatar.id)}
                   >
-                    <img src={studentAvatarSrc(avatar.id)} alt="" loading="lazy" />
+                    <img src={studentAvatarSrc(avatar.id)} alt="" loading={profile ? 'lazy' : 'eager'} />
                     {selected && <span aria-hidden="true"><Check /></span>}
                   </button>
                 )

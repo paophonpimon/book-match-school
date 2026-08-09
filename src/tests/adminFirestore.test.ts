@@ -103,4 +103,9 @@ describe('Admin Firestore transaction rules', () => {
     expect(loansSource).toContain('const snapshot = await getDocsFromServer(query(')
     expect(adminAuthSource).not.toContain('persistentLocalCache')
   })
+
+  it('loads every registered student and leaves pagination to the Admin list UI', () => {
+    expect(adminStudentsSource).toContain('export async function loadAdminStudentMembers()')
+    expect(adminStudentsSource).not.toContain('limit(maxResults)')
+  })
 })

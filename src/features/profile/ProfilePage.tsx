@@ -88,8 +88,8 @@ export function ProfilePage() {
         <div className="term-rank-card__content">
           <p className="eyebrow">ภาคเรียนปัจจุบัน</p>
           <h2 id="term-rank-heading">{currentTerm?.name}</h2>
-          <span className="term-rank-card__rank">
-            <img src={rankArtwork} alt="" aria-hidden="true" />
+          <span className={`term-rank-card__rank term-rank-card__rank--${termRank.key}`}>
+            <img className="term-rank-card__medal" src={rankArtwork} alt="" aria-hidden="true" />
             แรงก์ประจำเทอม: <strong>{termRank.name}</strong>
           </span>
           <p>อ่านจบในเทอมนี้ {termReadCount.toLocaleString('th-TH')} เล่ม</p>
