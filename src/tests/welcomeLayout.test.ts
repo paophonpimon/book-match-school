@@ -8,8 +8,9 @@ const brandSource = readFileSync(resolve(process.cwd(), 'src/components/Brand.ts
 const indexSource = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
 
 describe('welcome page visual structure', () => {
-  it('uses the supplied artwork, primary Student ID login, and legacy Google sign-in', () => {
-    expect(pageSource).toContain("../../../img/logo-book.webp")
+  it('uses the primary Student ID login and legacy Google sign-in without the old heart artwork', () => {
+    expect(pageSource).not.toContain("../../../img/logo-book.webp")
+    expect(pageSource).not.toContain('welcome-art')
     expect(pageSource).toContain('เข้าสู่ระบบด้วย Google')
     expect(pageSource).toContain('signInWithGoogle')
     expect(pageSource).toContain('signInWithStudentId')
@@ -23,15 +24,14 @@ describe('welcome page visual structure', () => {
     expect(styles).toContain('env(safe-area-inset-bottom)')
   })
 
-  it('keeps the brand and supplied artwork visually prominent', () => {
+  it('keeps the brand prominent while fitting the sign-in form in one mobile viewport', () => {
     expect(pageSource).toContain('/assets/book-match/logos/book-match-wordmark.webp')
-    expect(styles).toContain('.welcome-wordmark { width: clamp(190px, 52vw, 240px)')
-    expect(styles).toContain('width: clamp(178px, 49vw, 218px)')
-    expect(styles).toContain('.welcome-art { width: 164px')
+    expect(styles).toContain('.welcome-wordmark { width: clamp(180px, 48vw, 230px)')
+    expect(styles).toContain('.welcome-wordmark { width: 142px')
+    expect(styles).toContain('overflow-y: auto')
   })
 
-  it('adds gentle accessible motion to the welcome artwork and sign-in call to action', () => {
-    expect(styles).toContain('.welcome-art img { animation: student-float')
+  it('adds gentle accessible motion to the welcome sign-in call to action', () => {
     expect(styles).toContain('.welcome-spark { animation: student-twinkle')
     expect(styles).toContain('.welcome-student-button:not(:disabled) { animation: welcome-cta-glow')
     expect(styles).toContain('@keyframes welcome-flower-sway')

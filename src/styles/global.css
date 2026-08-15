@@ -79,12 +79,10 @@ em { font-style: normal; color: var(--coral-dark); }
 .bottom-nav a { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #897970; border-radius: 14px; font-size: .61rem; font-weight: 700; }
 .bottom-nav a.active { color: var(--coral-dark); background: #fff2eb; }
 
-.welcome-page { min-height: 100vh; min-height: 100dvh; position: relative; display: grid; place-items: center; padding: max(26px, env(safe-area-inset-top)) 24px max(22px, env(safe-area-inset-bottom)); background: radial-gradient(circle at 50% 38%, rgba(255,255,255,.94), transparent 42%), linear-gradient(180deg, #fffaf5 0%, #fffdf8 58%, #fbf6ed 100%); overflow: hidden; isolation: isolate; }
+.welcome-page { min-height: 100vh; min-height: 100dvh; position: relative; display: grid; place-items: center; padding: max(20px, env(safe-area-inset-top)) 24px max(16px, env(safe-area-inset-bottom)); background: radial-gradient(circle at 50% 38%, rgba(255,255,255,.94), transparent 42%), linear-gradient(180deg, #fffaf5 0%, #fffdf8 58%, #fbf6ed 100%); overflow-x: hidden; overflow-y: auto; isolation: isolate; }
 .welcome-page .demo-banner { position: absolute; inset: 0 0 auto; }
 .welcome-card { position: relative; z-index: 2; width: min(100%, 430px); display: flex; flex-direction: column; align-items: center; text-align: center; }
-.welcome-wordmark { width: clamp(190px, 52vw, 240px); height: auto; display: block; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(132, 70, 45, .13)); }
-.welcome-art { width: clamp(178px, 49vw, 218px); aspect-ratio: 1; display: grid; place-items: center; margin: clamp(17px, 3.8vh, 30px) auto clamp(8px, 1.7vh, 14px); }
-.welcome-art img { width: 100%; height: 100%; display: block; object-fit: contain; filter: drop-shadow(0 15px 18px rgba(184, 84, 65, .12)); }
+.welcome-wordmark { width: clamp(180px, 48vw, 230px); height: auto; display: block; margin-bottom: clamp(10px, 2vh, 18px); object-fit: contain; filter: drop-shadow(0 6px 12px rgba(132, 70, 45, .13)); }
 .welcome-heading > p { margin-bottom: 8px; color: #5e4439; font-size: clamp(.76rem, 3.2vw, .9rem); font-weight: 600; }
 .welcome-heading > p span { margin: 0 6px; color: #ed5a42; }
 .welcome-card h1 { margin-bottom: clamp(18px, 3.4vh, 29px); font: 600 clamp(2.05rem, 10vw, 3.15rem)/1.13 'Pridi', serif; letter-spacing: -.035em; }
@@ -115,8 +113,6 @@ em { font-style: normal; color: var(--coral-dark); }
 @keyframes welcome-flower-sway { 0%, 100% { transform: rotate(-12deg) translateY(0); } 50% { transform: rotate(-7deg) translateY(-4px); } }
 @keyframes welcome-botanical-breathe { 0%, 100% { opacity: .52; } 50% { opacity: .78; } }
 .welcome-wordmark { animation: welcome-fade-in .48s ease-out .04s both; }
-.welcome-art { animation: student-reveal .55s cubic-bezier(.2,.75,.3,1) .1s both; }
-.welcome-art img { animation: student-float 5.2s ease-in-out .65s infinite; }
 .welcome-heading { animation: student-reveal .55s cubic-bezier(.2,.75,.3,1) .18s both; }
 .welcome-login-panel { animation: student-reveal .55s cubic-bezier(.2,.75,.3,1) .28s both; }
 .welcome-spark { animation: student-twinkle 2.5s ease-in-out infinite; }
@@ -129,17 +125,24 @@ em { font-style: normal; color: var(--coral-dark); }
 .welcome-flower { animation: welcome-flower-sway 4.6s ease-in-out infinite; transform-origin: 60% 80%; }
 
 @media (max-height: 720px) and (max-width: 600px) {
-  .welcome-page { padding-top: 18px; padding-bottom: 14px; }
-  .welcome-wordmark { width: 176px; }
-  .welcome-art { width: 164px; margin-top: 9px; margin-bottom: 3px; }
-  .welcome-card h1 { margin-bottom: 15px; font-size: 2rem; }
-  .welcome-login-panel { padding: 13px 15px 11px; }
-  .welcome-login-icon { width: 36px; height: 36px; margin-bottom: 7px; }
-  .welcome-copy { margin-bottom: 10px; }
-  .welcome-student-login { gap: 7px; }
-  .welcome-student-login input { min-height: 42px; }
-  .welcome-student-button { min-height: 45px; }
-  .welcome-note { margin-top: 9px; }
+  .welcome-page { align-items: start; padding: max(10px, env(safe-area-inset-top)) 18px max(9px, env(safe-area-inset-bottom)); }
+  .welcome-wordmark { width: 142px; margin-bottom: 5px; }
+  .welcome-heading > p { margin-bottom: 3px; font-size: .68rem; }
+  .welcome-card h1 { margin-bottom: 8px; font-size: 1.68rem; line-height: 1.08; }
+  .welcome-login-panel { padding: 9px 13px 8px; border-radius: 20px; }
+  .welcome-login-icon { width: 30px; height: 30px; margin-bottom: 3px; }
+  .welcome-login-icon svg { width: 16px; }
+  .welcome-login-panel h2 { font-size: 1rem; }
+  .welcome-copy { margin-bottom: 6px; font-size: .68rem; line-height: 1.35; }
+  .welcome-student-login { gap: 5px; }
+  .welcome-student-login label { gap: 2px; font-size: .67rem; }
+  .welcome-student-login input { min-height: 38px; padding: 0 11px; }
+  .welcome-student-button { min-height: 40px; }
+  .welcome-login-divider { margin: 6px 0 3px; }
+  .welcome-legacy-label { margin-bottom: 3px; font-size: .64rem; }
+  .welcome-google-button { min-height: 38px; }
+  .welcome-note { margin-top: 5px; font-size: .61rem; }
+  .welcome-note svg { width: 20px; height: 20px; }
 }
 
 @media (min-width: 760px) {

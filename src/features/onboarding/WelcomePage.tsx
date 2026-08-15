@@ -4,7 +4,6 @@ import { Navigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { LoadingScreen } from '../../components/AppShell'
 import { getStudentEntryRoute } from '../../utils/studentRouting'
-import welcomeBookArt from '../../../img/logo-book.webp'
 
 function GoogleMark() {
   return (
@@ -70,7 +69,6 @@ export function WelcomePage() {
           fetchPriority="high"
           decoding="async"
         />
-        <div className="welcome-art" aria-hidden="true"><img src={welcomeBookArt} alt="" fetchPriority="high" decoding="async" /></div>
         <div className="welcome-heading">
           <p><span>✦</span> ค้นพบหนังสือที่ตรงกับคุณ <span>✦</span></p>
           <h1>หนังสือที่ใช่<br /><em>สำหรับอารมณ์วันนี้</em></h1>
