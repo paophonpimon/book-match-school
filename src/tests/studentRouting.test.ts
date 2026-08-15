@@ -34,4 +34,10 @@ describe('student account routing', () => {
     expect(setupPage).toContain('if (canReturnToProfile)')
     expect(setupPage).toContain('navigate(-1)')
   })
+
+  it('sets a new password inside the existing imported-student setup before saving the profile', () => {
+    expect(setupPage).toContain('ตั้งรหัสผ่านของฉัน')
+    expect(setupPage).toContain('validateNewStudentPassword')
+    expect(setupPage.indexOf('await updateCurrentStudentPassword(newPassword)')).toBeLessThan(setupPage.indexOf('await saveProfile({'))
+  })
 })

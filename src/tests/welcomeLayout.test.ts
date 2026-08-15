@@ -16,6 +16,8 @@ describe('welcome page visual structure', () => {
     expect(pageSource).toContain('signInWithStudentId')
     expect(pageSource).toContain('เลขประจำตัวนักเรียน')
     expect(pageSource).toContain('สมาชิกเดิมที่เคยสมัครด้วย Google')
+    expect(pageSource).toContain('เข้าใช้ครั้งแรก? ให้กรอกเลขประจำตัวนักเรียนซ้ำอีกครั้ง')
+    expect(pageSource).toContain('ลืมรหัสผ่านใช่ไหม?')
   })
 
   it('supports dynamic viewport height and short mobile screens', () => {

@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { KeyRound, LoaderCircle, ShieldCheck, UserRoundCheck } from 'lucide-react'
+import { useEffect, useId, useState, type FormEvent } from 'react'
+import { CircleHelp, KeyRound, LoaderCircle, ShieldCheck, UserRoundCheck, X } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { LoadingScreen } from '../../components/AppShell'
@@ -33,12 +33,23 @@ export function WelcomePage() {
   const [studentId, setStudentId] = useState('')
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState('')
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false)
+  const forgotPasswordTitleId = useId()
   const entryRoute = getStudentEntryRoute({
     loading,
     signedIn: Boolean(authUser),
     hasActiveTerm: Boolean(currentTerm),
     hasProfile: Boolean(profile),
   })
+  useEffect(() => {
+    if (!forgotPasswordOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setForgotPasswordOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [forgotPasswordOpen])
+
   if (entryRoute === 'loading') return <LoadingScreen />
   if (entryRoute === 'home') return <Navigate to="/home" replace />
   if (entryRoute === 'setup') return <Navigate to="/setup" replace />
@@ -87,8 +98,11 @@ export function WelcomePage() {
                 </label>
                 <label>
                   รหัสผ่าน
-                  <input required type="password" inputMode="numeric" autoComplete="current-password" maxLength={6} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="กรอกรหัสผ่าน" />
+                  <input required type="password" autoComplete="current-password" maxLength={64} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="กรอกรหัสผ่าน" />
+                  <span className="welcome-password-help">เข้าใช้ครั้งแรก? ให้กรอกเลขประจำตัวนักเรียนซ้ำอีกครั้ง</span>
+                  <span className="welcome-password-example">เช่น เลขประจำตัว 07143 → รหัสผ่านครั้งแรก 07143</span>
                 </label>
+                <button className="welcome-forgot-button" type="button" onClick={() => setForgotPasswordOpen(true)}>ลืมรหัสผ่าน?</button>
                 <button className="button button--primary button--wide welcome-student-button" type="submit" disabled={syncing}>
                   {syncing ? <><LoaderCircle className="spin" /> กำลังเข้าสู่ระบบ…</> : <><UserRoundCheck /> เข้าสู่ระบบ</>}
                 </button>
@@ -103,6 +117,23 @@ export function WelcomePage() {
           <div className="welcome-note"><ShieldCheck /> <span>บัญชีเดิมและประวัติการอ่านของคุณยังคงปลอดภัย</span></div>
         </div>
       </section>
+      {forgotPasswordOpen && (
+        <div className="confirmation-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setForgotPasswordOpen(false)
+        }}>
+          <section className="confirmation-dialog welcome-help-dialog" role="dialog" aria-modal="true" aria-labelledby={forgotPasswordTitleId}>
+            <button className="confirmation-dialog__close" type="button" onClick={() => setForgotPasswordOpen(false)} aria-label="ปิด"><X /></button>
+            <span className="confirmation-dialog__icon" aria-hidden="true"><CircleHelp /></span>
+            <p className="eyebrow">ช่วยเหลือการเข้าสู่ระบบ</p>
+            <h2 id={forgotPasswordTitleId}>ลืมรหัสผ่านใช่ไหม?</h2>
+            <p>ไม่เป็นไร 😊 กรุณาแจ้งบรรณารักษ์เพื่อขอรีเซ็ตรหัสผ่าน</p>
+            <p>เตรียมชื่อ–นามสกุล และเลขประจำตัวนักเรียน เพื่อให้บรรณารักษ์ตรวจสอบบัญชี</p>
+            <div className="confirmation-dialog__actions welcome-help-dialog__actions">
+              <button className="button button--primary" type="button" onClick={() => setForgotPasswordOpen(false)}>เข้าใจแล้ว</button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }

@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
   type Auth,
   type User,
 } from 'firebase/auth'
@@ -44,7 +45,7 @@ import type {
 import { normalizeStudentAvatarId } from '../data/avatars'
 import { applyCompletion, applyStatusTransition, countersForCurrentStatus, emptyBookCounters, planLikeTransaction, planSavedTransaction, type BookCounters } from '../utils/firestoreCounters'
 import { getReaderLevel } from '../utils/readerLevels'
-import { studentInternalEmail, validateStudentIdCredentials } from '../utils/studentAuth'
+import { studentFirebasePassword, studentInternalEmail, validateStudentIdCredentials } from '../utils/studentAuth'
 import { planLifetimeReadCredit } from '../utils/readerStats'
 import { env, firebaseConfigured } from './env'
 import { bookStatsWriteFields, buildUserBookWritePayload, hasExactFields, progressWriteFields, userBookWriteFields } from './firestorePayloads'
@@ -135,7 +136,7 @@ export async function signInStudentWithId(studentId: string, password: string) {
   const normalized = validateStudentIdCredentials(studentId, password)
   await setPersistence(auth, browserLocalPersistence)
   try {
-    return (await signInWithEmailAndPassword(auth, studentInternalEmail(normalized), `${password}!Bm`)).user
+    return (await signInWithEmailAndPassword(auth, studentInternalEmail(normalized), studentFirebasePassword(normalized, password))).user
   } catch (error) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
     if (code.includes('invalid-credential') || code.includes('user-not-found') || code.includes('wrong-password')) {
@@ -144,6 +145,16 @@ export async function signInStudentWithId(studentId: string, password: string) {
     if (code.includes('user-disabled')) throw new Error('บัญชีนี้ถูกระงับ กรุณาติดต่อบรรณารักษ์')
     if (code.includes('too-many-requests')) throw new Error('ลองเข้าสู่ระบบหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่')
     throw error
+  }
+}
+
+export async function updateCurrentStudentPassword(password: string) {
+  const user = auth?.currentUser
+  if (!user) throw new Error('กรุณาเข้าสู่ระบบอีกครั้ง')
+  try {
+    await updatePassword(user, password)
+  } catch {
+    throw new Error('ยังบันทึกรหัสผ่านไม่ได้ กรุณาลองอีกครั้ง')
   }
 }
 

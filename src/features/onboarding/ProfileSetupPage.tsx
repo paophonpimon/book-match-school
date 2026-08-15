@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, BadgeCheck, Check, LogOut } from 'lucide-react'
+import { ArrowRight, BadgeCheck, Check, Eye, EyeOff, LockKeyhole, LogOut } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
 import { normalizeStudentAvatarId, studentAvatars, studentAvatarSrc, type StudentAvatarId } from '../../data/avatars'
 import { classNameFromGradeLevel, gradeLevelFromClassName, hasPermanentStudentId, validateStudentProfile } from '../../utils/profile'
+import { updateCurrentStudentPassword } from '../../services/firebase'
+import { validateNewStudentPassword } from '../../utils/studentAuth'
 
 export function ProfileSetupPage() {
   const { authUser, currentTerm, profile, membership, studentDirectory, saveProfile, resetDevice, syncing } = useApp()
@@ -25,6 +27,10 @@ export function ProfileSetupPage() {
   const [studentNumber, setStudentNumber] = useState(profile?.studentNumber ?? studentDirectory?.studentNumber ?? '')
   const [error, setError] = useState(redirectedError)
   const [saving, setSaving] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const studentIdLocked = hasPermanentStudentId(profile?.studentId)
   const canReturnToProfile = Boolean(profile && membership)
   const importedFirstLogin = Boolean(!profile && studentDirectory)
@@ -52,9 +58,17 @@ export function ProfileSetupPage() {
       setError(validationError)
       return
     }
+    if (importedFirstLogin) {
+      const passwordError = validateNewStudentPassword(studentId, newPassword, confirmPassword)
+      if (passwordError) {
+        setError(passwordError)
+        return
+      }
+    }
     setError('')
     setSaving(true)
     try {
+      if (importedFirstLogin) await updateCurrentStudentPassword(newPassword)
       await saveProfile({
         avatarId,
         studentId: studentId.trim(),
@@ -151,6 +165,30 @@ export function ProfileSetupPage() {
             </>
           )}
           <label>ชื่อเล่น/ชื่อที่จะแสดง<input required autoComplete="nickname" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="เช่น มินยอดนักอ่าน" maxLength={40} /></label>
+          {importedFirstLogin && (
+            <fieldset className="first-login-password">
+              <legend><LockKeyhole /> ตั้งรหัสผ่านของฉัน</legend>
+              <p>ตั้งรหัสที่หนูจำได้ เพื่อใช้เข้า Book Match ครั้งต่อไป</p>
+              <label>
+                รหัสผ่านใหม่
+                <span className="password-input">
+                  <input required type={showNewPassword ? 'text' : 'password'} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="เช่น Mali2569 หรือ Book1234" />
+                  <button type="button" onClick={() => setShowNewPassword((current) => !current)} aria-label={showNewPassword ? 'ซ่อนรหัสผ่านใหม่' : 'แสดงรหัสผ่านใหม่'}>{showNewPassword ? <EyeOff /> : <Eye />}</button>
+                </span>
+                <small>อย่างน้อย 8 ตัวอักษร ใช้ตัวอักษรและตัวเลขได้</small>
+                <small>อย่าใช้เลขประจำตัวนักเรียนเป็นรหัสผ่าน</small>
+              </label>
+              <label>
+                กรอกรหัสผ่านใหม่อีกครั้ง
+                <span className="password-input">
+                  <input required type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="กรอกรหัสเดิมอีกครั้ง" />
+                  <button type="button" onClick={() => setShowConfirmPassword((current) => !current)} aria-label={showConfirmPassword ? 'ซ่อนการยืนยันรหัสผ่าน' : 'แสดงการยืนยันรหัสผ่าน'}>{showConfirmPassword ? <EyeOff /> : <Eye />}</button>
+                </span>
+                <small>กรอกรหัสเดิมอีกครั้งให้เหมือนกัน</small>
+              </label>
+              <p className="first-login-password__reminder">ครั้งหน้าจะเข้า Book Match ด้วย เลขประจำตัวนักเรียน + รหัสผ่านที่ตั้งตรงนี้</p>
+            </fieldset>
+          )}
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="button button--primary button--wide" disabled={saving || syncing}>{saving ? 'กำลังบันทึก…' : profile ? 'บันทึกโปรไฟล์' : 'เริ่มใช้งาน Book Match'} <ArrowRight /></button>
           {!canReturnToProfile && (
