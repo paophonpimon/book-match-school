@@ -18,8 +18,17 @@ describe('student leaderboard visual structure', () => {
     expect(page).toContain('sortLeaderboard')
     expect(page).toContain("scope === 'class'")
     expect(page).toContain('reader.className === profile?.className')
-    expect(page).toContain('filtered.map((reader, index)')
+    expect(page).toContain('visibleReaders.map((reader, index)')
     expect(page).toContain('className="leaderboard-table"')
+  })
+
+  it('paginates the real reader list ten readers at a time', () => {
+    expect(page).toContain('const READERS_PER_PAGE = 10')
+    expect(page).toContain('filtered.slice(pageStart, pageStart + READERS_PER_PAGE)')
+    expect(page).toContain('className="leaderboard-pagination"')
+    expect(page).toContain("aria-current={pageNumber === activePage ? 'page' : undefined}")
+    expect(page).toContain('{pageStart + index + 1}')
+    expect(css).toContain('.leaderboard-pagination {')
   })
 
   it('uses supplied ranking artwork as decoration around real HTML content', () => {

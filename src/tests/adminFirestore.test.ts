@@ -104,6 +104,17 @@ describe('Admin Firestore transaction rules', () => {
     expect(adminAuthSource).not.toContain('persistentLocalCache')
   })
 
+  it('keeps current-term leaderboard eligibility aligned with membership status', () => {
+    expect(adminStudentsSource).toContain("const eligible = status === 'active'")
+    expect(adminStudentsSource).toContain("doc(firestore, 'progress', `${termId}_${uid}`)")
+    expect(adminStudentsSource).toContain('transaction.update(progressRef, { eligible, updatedAt: serverTimestamp() })')
+    expect(adminStudentsSource).toContain('hasLeaderboardProgress')
+    expect(adminStudentsSource).toContain('leaderboardEligible')
+    expect(rules).toContain('function validAdminProgressEligibilityUpdate(recordId)')
+    expect(rules).toContain("== (getAfter(membershipPath).data.status == 'active')")
+    expect(rules).toContain("'eligible', 'updatedAt'")
+  })
+
   it('loads every registered student and leaves pagination to the Admin list UI', () => {
     expect(adminStudentsSource).toContain('export async function loadAdminStudentMembers()')
     expect(adminStudentsSource).not.toContain('limit(maxResults)')

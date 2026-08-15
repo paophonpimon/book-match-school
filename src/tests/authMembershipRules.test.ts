@@ -12,16 +12,20 @@ describe('Google student authentication and membership security', () => {
     expect(appContext).not.toContain('ensureAnonymousUser')
   })
 
-  it('uses Google popup with redirect fallback and restored auth state', () => {
+  it('uses Google popup without the cross-origin redirect fallback', () => {
     expect(firebaseService).toContain('signInWithPopup')
-    expect(firebaseService).toContain('signInWithRedirect')
+    expect(firebaseService).not.toContain('signInWithRedirect')
+    expect(firebaseService).not.toContain('getRedirectResult')
     expect(firebaseService).toContain('onAuthStateChanged')
+    expect(appContext).toContain('const user = await signInStudentWithGoogle()')
+    expect(appContext).toContain('hydratedAuthUidRef.current = user.uid')
+    expect(appContext).toContain('await hydrate(user)')
   })
 
   it('upgrades a legacy anonymous account by linking Google without changing its UID', () => {
     expect(firebaseService).toContain('auth.currentUser?.isAnonymous')
     expect(firebaseService).toContain('linkWithPopup(auth.currentUser, provider)')
-    expect(firebaseService).toContain('linkWithRedirect(auth.currentUser, provider)')
+    expect(firebaseService).not.toContain('linkWithRedirect(auth.currentUser, provider)')
   })
 
   it('requires verified token email for membership ownership', () => {

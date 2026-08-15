@@ -83,11 +83,26 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
     try {
       await updateMembershipStatusAsAdmin(member.studentId, nextStatus)
       setMembers((current) => current.map((item) => item.studentId === member.studentId
-        ? { ...item, status: nextStatus, updatedAt: new Date().toISOString() }
+        ? { ...item, status: nextStatus, leaderboardEligible: item.hasLeaderboardProgress && nextStatus === 'active', updatedAt: new Date().toISOString() }
         : item))
       setStatusConfirmation(null)
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'เปลี่ยนสถานะสมาชิกไม่สำเร็จ')
+    } finally {
+      setMutatingId('')
+    }
+  }
+
+  async function repairLeaderboardEligibility(member: AdminStudentMember) {
+    setMutatingId(member.studentId)
+    setError('')
+    try {
+      await updateMembershipStatusAsAdmin(member.studentId, member.status)
+      setMembers((current) => current.map((item) => item.studentId === member.studentId
+        ? { ...item, leaderboardEligible: item.hasLeaderboardProgress && item.status === 'active', updatedAt: new Date().toISOString() }
+        : item))
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'แก้การแสดงผลในอันดับไม่สำเร็จ')
     } finally {
       setMutatingId('')
     }
@@ -117,6 +132,8 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
           : <div className="admin-member-list">{visible.map((member) => {
               const level = getReaderLevel(member.lifetimeReadCount)
               const rank = getTermReaderRank(member.currentTermReadCount)
+              const leaderboardEligibilityMismatch = member.hasLeaderboardProgress
+                && member.leaderboardEligible !== (member.status === 'active')
               return (
                 <article key={member.studentId}>
                   <div><span className={`status-pill status-pill--${member.status}`}>{statusLabels[member.status]}</span><h3>{member.firstName} {member.lastName}</h3><p>{member.displayName} · {member.className} เลขที่ {member.studentNumber}</p></div>
@@ -132,6 +149,12 @@ export function AdminStudentMembers({ refreshVersion = 0, onRefreshComplete }: A
                     const nextStatus = event.target.value as MembershipStatus
                     if (nextStatus !== member.status) setStatusConfirmation({ member, nextStatus })
                   }}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  {leaderboardEligibilityMismatch && (
+                    <button className="button button--secondary button--small" type="button" disabled={mutatingId === member.studentId} onClick={() => void repairLeaderboardEligibility(member)}>
+                      {mutatingId === member.studentId ? <LoaderCircle className="spin" /> : <RefreshCw />}
+                      {member.status === 'active' ? 'คืนรายชื่อสู่อันดับ' : 'ซ่อนรายชื่อจากอันดับ'}
+                    </button>
+                  )}
                 </article>
               )
             })}</div>}

@@ -4,13 +4,10 @@ import {
   browserLocalPersistence,
   connectAuthEmulator,
   getAuth,
-  getRedirectResult,
   linkWithPopup,
-  linkWithRedirect,
   onAuthStateChanged,
   setPersistence,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
   type Auth,
   type User,
@@ -45,7 +42,6 @@ import type {
 import { normalizeStudentAvatarId } from '../data/avatars'
 import { applyCompletion, applyStatusTransition, countersForCurrentStatus, emptyBookCounters, planLikeTransaction, planSavedTransaction, type BookCounters } from '../utils/firestoreCounters'
 import { getReaderLevel } from '../utils/readerLevels'
-import { shouldUseGoogleSignInRedirect } from '../utils/googleSignInFlow'
 import { assertMembershipRegistrationAvailable } from '../utils/membership'
 import { planLifetimeReadCredit } from '../utils/readerStats'
 import { env, firebaseConfigured } from './env'
@@ -104,22 +100,11 @@ export function currentStudentUser() {
   return auth?.currentUser ?? null
 }
 
-export async function completeStudentRedirectSignIn() {
-  if (!auth) return null
-  await setPersistence(auth, browserLocalPersistence)
-  return (await getRedirectResult(auth))?.user ?? auth.currentUser
-}
-
 export async function signInStudentWithGoogle() {
   if (!auth) throw new Error('Firebase Authentication ยังไม่พร้อมใช้งาน')
   await setPersistence(auth, browserLocalPersistence)
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
-  if (shouldUseGoogleSignInRedirect()) {
-    if (auth.currentUser?.isAnonymous) await linkWithRedirect(auth.currentUser, provider)
-    else await signInWithRedirect(auth, provider)
-    return null
-  }
   try {
     if (auth.currentUser?.isAnonymous) {
       return (await linkWithPopup(auth.currentUser, provider)).user
@@ -134,9 +119,10 @@ export async function signInStudentWithGoogle() {
       throw new Error('ยกเลิกการเข้าสู่ระบบด้วย Google แล้ว')
     }
     if (code.includes('popup-blocked') || code.includes('operation-not-supported-in-this-environment')) {
-      if (auth.currentUser?.isAnonymous) await linkWithRedirect(auth.currentUser, provider)
-      else await signInWithRedirect(auth, provider)
-      return null
+      throw new Error('เบราว์เซอร์ปิดกั้นหน้าต่างเข้าสู่ระบบ กรุณาอนุญาตป๊อปอัปสำหรับเว็บไซต์นี้แล้วลองอีกครั้ง')
+    }
+    if (code.includes('web-storage-unsupported') || code.includes('missing-initial-state')) {
+      throw new Error('เบราว์เซอร์นี้ปิดกั้นข้อมูลชั่วคราวสำหรับเข้าสู่ระบบ กรุณาเปิดลิงก์ด้วย Chrome หรือ Safari แล้วลองอีกครั้ง')
     }
     throw error
   }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BookOpen, Sparkles } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
@@ -10,6 +10,7 @@ import { isSafeProfileDisplayName } from '../../utils/profile'
 import { getTermReaderRank } from '../../utils/readerLevels'
 
 const leaderboardAssets = '/assets/book-match/leaderboard'
+const READERS_PER_PAGE = 10
 
 const podiumPlaces = [
   { sourceIndex: 1, rank: 2, medal: 'rank-medal-silver.png' },
@@ -65,6 +66,7 @@ export function LeaderboardPage() {
   const { readers, profile, userBooks, settings } = useApp()
   const [search] = useSearchParams()
   const [scope, setScope] = useState<'all' | 'class'>('all')
+  const [page, setPage] = useState(1)
   const myReads = Object.values(userBooks).filter((item) => item.status === 'read').length
   const merged = useMemo(() => {
     const safeReaders = readers.filter((reader) => isSafeProfileDisplayName(reader.displayName))
@@ -73,6 +75,10 @@ export function LeaderboardPage() {
     return sortLeaderboard([...safeReaders, { uid: profile.uid, avatarId: profile.avatarId, firstName: profile.firstName, lastName: profile.lastName, displayName: profile.displayName, className: profile.className, readCount: myReads, likedCount: 0, eligible: true, lastReadAt }])
   }, [readers, profile, myReads, userBooks])
   const filtered = scope === 'class' ? merged.filter((reader) => reader.className === profile?.className) : merged
+  const pageCount = Math.max(1, Math.ceil(filtered.length / READERS_PER_PAGE))
+  const activePage = Math.min(page, pageCount)
+  const pageStart = (activePage - 1) * READERS_PER_PAGE
+  const visibleReaders = filtered.slice(pageStart, pageStart + READERS_PER_PAGE)
   const myRank = merged.findIndex((reader) => reader.uid === profile?.uid) + 1
 
   return (
@@ -89,8 +95,8 @@ export function LeaderboardPage() {
       </section>
 
       <div className="leaderboard-segment" role="group" aria-label="ขอบเขตอันดับนักอ่าน">
-        <button className={scope === 'all' ? 'active' : ''} type="button" aria-pressed={scope === 'all'} onClick={() => setScope('all')}>อันดับรวม</button>
-        <button className={scope === 'class' ? 'active' : ''} type="button" aria-pressed={scope === 'class'} onClick={() => setScope('class')}>ในห้อง {profile?.className}</button>
+        <button className={scope === 'all' ? 'active' : ''} type="button" aria-pressed={scope === 'all'} onClick={() => { setScope('all'); setPage(1) }}>อันดับรวม</button>
+        <button className={scope === 'class' ? 'active' : ''} type="button" aria-pressed={scope === 'class'} onClick={() => { setScope('class'); setPage(1) }}>ในห้อง {profile?.className}</button>
       </div>
 
       {filtered.length > 0 ? (
@@ -119,9 +125,9 @@ export function LeaderboardPage() {
               <span>{filtered.length} คน</span>
             </div>
             <div className="ranking-list">
-              {filtered.map((reader, index) => (
+              {visibleReaders.map((reader, index) => (
                 <article key={reader.uid} className={reader.uid === profile?.uid ? 'current' : ''}>
-                  <span className={`ranking-list__position ranking-list__position--${Math.min(index + 1, 4)}`}>{index + 1}</span>
+                  <span className={`ranking-list__position ranking-list__position--${Math.min(pageStart + index + 1, 4)}`}>{pageStart + index + 1}</span>
                   <img className="reader-avatar reader-avatar--small" src={studentAvatarSrc(reader.avatarId)} alt="" />
                   <div className="ranking-list__reader">
                     <strong>{readerNickname(reader)}</strong>
@@ -132,6 +138,26 @@ export function LeaderboardPage() {
                 </article>
               ))}
             </div>
+            {pageCount > 1 && (
+              <nav className="leaderboard-pagination" aria-label="หน้ารายชื่อนักอ่าน">
+                <button type="button" aria-label="หน้าก่อนหน้า" disabled={activePage === 1} onClick={() => setPage(activePage - 1)}><ChevronLeft /></button>
+                <div className="leaderboard-pagination__pages">
+                  {Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      className={pageNumber === activePage ? 'active' : ''}
+                      aria-label={`หน้า ${pageNumber}`}
+                      aria-current={pageNumber === activePage ? 'page' : undefined}
+                      onClick={() => setPage(pageNumber)}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" aria-label="หน้าถัดไป" disabled={activePage === pageCount} onClick={() => setPage(activePage + 1)}><ChevronRight /></button>
+              </nav>
+            )}
           </section>
         </>
       ) : (

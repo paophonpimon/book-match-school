@@ -24,6 +24,8 @@ export interface AdminStudentMember extends StudentMembership {
   lifetimeReadCount: number
   currentTermReadCount: number
   activeLoanCount: number
+  hasLeaderboardProgress: boolean
+  leaderboardEligible: boolean
 }
 
 function asIso(value: unknown) {
@@ -91,6 +93,7 @@ export async function loadAdminStudentMembers(): Promise<AdminStudentMember[]> {
     const profile = profiles.get(membership.uid) ?? {}
     const readerStats = stats.get(membership.uid) ?? {}
     const currentProgress = progress.get(`${termId}_${membership.uid}`) ?? {}
+    const hasLeaderboardProgress = progress.has(`${termId}_${membership.uid}`)
     return {
       ...membership,
       firstName: String(profile.firstName ?? ''),
@@ -101,6 +104,8 @@ export async function loadAdminStudentMembers(): Promise<AdminStudentMember[]> {
       lifetimeReadCount: Math.max(0, Number(readerStats.lifetimeReadCount ?? 0)),
       currentTermReadCount: Math.max(0, Number(currentProgress.readCount ?? 0)),
       activeLoanCount: activeLoanCounts.get(membership.uid) ?? 0,
+      hasLeaderboardProgress,
+      leaderboardEligible: hasLeaderboardProgress && currentProgress.eligible !== false,
     }
   })
 }
@@ -109,10 +114,21 @@ export async function updateMembershipStatusAsAdmin(studentId: string, status: M
   const { firestore } = await getVerifiedAdminFirebaseContext()
   const membershipRef = doc(firestore, 'studentMemberships', studentId)
   return runTransaction(firestore, async (transaction) => {
-    const snapshot = await transaction.get(membershipRef)
-    if (!snapshot.exists()) throw new Error('ไม่พบสมาชิกนักเรียน')
-    if (snapshot.data().status === status) return false
-    transaction.update(membershipRef, { status, updatedAt: serverTimestamp() })
+    const membershipSnapshot = await transaction.get(membershipRef)
+    if (!membershipSnapshot.exists()) throw new Error('ไม่พบสมาชิกนักเรียน')
+    const uid = String(membershipSnapshot.data().uid ?? '')
+    const currentTermSnapshot = await transaction.get(doc(firestore, 'settings', 'currentTerm'))
+    const termId = String(currentTermSnapshot.data()?.termId ?? '')
+    const progressRef = uid && termId ? doc(firestore, 'progress', `${termId}_${uid}`) : null
+    const progressSnapshot = progressRef ? await transaction.get(progressRef) : null
+    const eligible = status === 'active'
+    const membershipChanged = membershipSnapshot.data().status !== status
+    const eligibilityChanged = Boolean(progressSnapshot?.exists() && progressSnapshot.data().eligible !== eligible)
+    if (!membershipChanged && !eligibilityChanged) return false
+    if (membershipChanged) transaction.update(membershipRef, { status, updatedAt: serverTimestamp() })
+    if (progressRef && eligibilityChanged) {
+      transaction.update(progressRef, { eligible, updatedAt: serverTimestamp() })
+    }
     return true
   })
 }

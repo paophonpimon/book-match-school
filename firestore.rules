@@ -339,21 +339,45 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp;
     }
 
+    function validAdminProgressEligibilityUpdate(recordId) {
+      let profilePath = /databases/$(database)/documents/profiles/$(resource.data.uid);
+      let studentId = get(profilePath).data.studentId;
+      let membershipPath = /databases/$(database)/documents/studentMemberships/$(studentId);
+      return isAdmin()
+        && exists(profilePath)
+        && existsAfter(membershipPath)
+        && getAfter(membershipPath).data.uid == resource.data.uid
+        && recordId == resource.data.termId + '_' + resource.data.uid
+        && request.resource.data.keys().hasOnly([
+          'uid', 'termId', 'avatarId', 'firstName', 'lastName', 'displayName', 'className', 'readCount', 'likedCount',
+          'eligible', 'lastReadAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.termId == resource.data.termId
+        && request.resource.data.eligible
+          == (getAfter(membershipPath).data.status == 'active')
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'eligible', 'updatedAt'
+        ]);
+    }
+
     match /progress/{recordId} {
       allow read: if signedIn();
       allow create: if validProgress(recordId)
         && request.resource.data.readCount <= 1
         && request.resource.data.likedCount <= 1
         && request.resource.data.eligible == true;
-      allow update: if validProgress(recordId)
-        && request.resource.data.eligible == resource.data.eligible
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'avatarId', 'firstName', 'lastName', 'displayName', 'className', 'readCount', 'likedCount', 'lastReadAt', 'updatedAt'
-        ])
-        && request.resource.data.readCount >= resource.data.readCount
-        && request.resource.data.readCount <= resource.data.readCount + 1
-        && request.resource.data.likedCount >= resource.data.likedCount - 1
-        && request.resource.data.likedCount <= resource.data.likedCount + 1;
+      allow update: if (validProgress(recordId)
+          && request.resource.data.eligible == resource.data.eligible
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'avatarId', 'firstName', 'lastName', 'displayName', 'className', 'readCount', 'likedCount', 'lastReadAt', 'updatedAt'
+          ])
+          && request.resource.data.readCount >= resource.data.readCount
+          && request.resource.data.readCount <= resource.data.readCount + 1
+          && request.resource.data.likedCount >= resource.data.likedCount - 1
+          && request.resource.data.likedCount <= resource.data.likedCount + 1)
+        || validAdminProgressEligibilityUpdate(recordId);
       allow delete: if false;
     }
 

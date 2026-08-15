@@ -3,12 +3,26 @@ import { useNavigate } from 'react-router-dom'
 import { StudentBrand } from './StudentBrand'
 import { StudentNotificationCenter } from './StudentNotificationCenter'
 
-export function PageHeader({ title, center, back = false, action }: { title?: string; center?: React.ReactNode; back?: boolean; action?: React.ReactNode }) {
+export function PageHeader({
+  title,
+  center,
+  back = false,
+  backLabel = 'ย้อนกลับ',
+  onBack,
+  action,
+}: {
+  title?: string
+  center?: React.ReactNode
+  back?: boolean
+  backLabel?: string
+  onBack?: () => void
+  action?: React.ReactNode
+}) {
   const navigate = useNavigate()
   return (
     <header className="page-header">
       <div className="page-header__side">
-        {back ? <button className="icon-button" onClick={() => navigate(-1)} aria-label="ย้อนกลับ"><ArrowLeft /></button> : <StudentBrand compact />}
+        {back ? <button className="icon-button" onClick={() => { if (onBack) onBack(); else navigate(-1) }} aria-label={backLabel}><ArrowLeft /></button> : <StudentBrand compact />}
       </div>
       <div className="page-header__center">{center ?? (title && <h1>{title}</h1>)}</div>
       <div className="page-header__side page-header__side--right">

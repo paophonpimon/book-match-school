@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, BadgeCheck, Check, Link2, LoaderCircle } from 'lucide-react'
+import { ArrowRight, BadgeCheck, Check, Link2, LoaderCircle, LogOut } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
@@ -7,7 +7,7 @@ import { normalizeStudentAvatarId, studentAvatars, studentAvatarSrc, type Studen
 import { classNameFromGradeLevel, gradeLevelFromClassName, hasPermanentStudentId, validateStudentProfile } from '../../utils/profile'
 
 export function ProfileSetupPage() {
-  const { authUser, currentTerm, profile, saveProfile, signInWithGoogle, syncing } = useApp()
+  const { authUser, currentTerm, profile, membership, saveProfile, signInWithGoogle, resetDevice, syncing } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const redirectedError = typeof location.state === 'object'
@@ -27,8 +27,18 @@ export function ProfileSetupPage() {
   const [saving, setSaving] = useState(false)
   const studentIdLocked = hasPermanentStudentId(profile?.studentId)
   const needsGoogleLink = authUser?.isAnonymous === true || !authUser?.email
+  const canReturnToProfile = Boolean(profile && membership)
 
   if (!authUser || !currentTerm) return <Navigate to="/welcome" replace />
+
+  function leaveSetup() {
+    if (canReturnToProfile) {
+      navigate(-1)
+      return
+    }
+    resetDevice()
+    navigate('/welcome', { replace: true })
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -66,7 +76,12 @@ export function ProfileSetupPage() {
 
   return (
     <main className="standalone-page">
-      <PageHeader title="รู้จักกันนิดหนึ่ง" back />
+      <PageHeader
+        title="รู้จักกันนิดหนึ่ง"
+        back
+        backLabel={canReturnToProfile ? 'ย้อนกลับ' : 'ยกเลิกการสมัครและเปลี่ยนบัญชี Google'}
+        onBack={leaveSetup}
+      />
       <section className="form-card profile-setup">
         <span className="feature-icon"><BadgeCheck /></span>
         <p className="eyebrow">โปรไฟล์นักอ่าน</p>
@@ -116,6 +131,11 @@ export function ProfileSetupPage() {
           <label>ชื่อเล่น/ชื่อที่จะแสดง<input required autoComplete="nickname" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="เช่น มินยอดนักอ่าน" maxLength={40} /></label>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="button button--primary button--wide" disabled={saving || syncing || needsGoogleLink}>{saving ? 'กำลังบันทึก…' : needsGoogleLink ? 'เชื่อมบัญชี Google ก่อน' : profile ? 'บันทึกโปรไฟล์' : 'ไปเลือกอารมณ์'} <ArrowRight /></button>
+          {!canReturnToProfile && (
+            <button className="button button--secondary button--wide profile-setup__change-account" type="button" onClick={leaveSetup} disabled={saving || syncing}>
+              <LogOut /> ยกเลิกและใช้บัญชี Google อื่น
+            </button>
+          )}
         </form>
         <small>{studentIdLocked
           ? `บัญชีสมาชิกผูกกับ ${authUser.email} และไม่สามารถเปลี่ยนเลขประจำตัวนักเรียนภายหลังได้`

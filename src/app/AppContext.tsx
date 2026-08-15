@@ -4,7 +4,6 @@ import { demoSettings } from '../data/demoData'
 import { loadCatalog, type CatalogResult, type CatalogSource } from '../services/catalog'
 import {
   completeBookRemote,
-  completeStudentRedirectSignIn,
   currentStudentUser,
   deleteUserBookRemote,
   getFirebaseRuntimeStatus,
@@ -154,6 +153,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [levelUp, setLevelUp] = useState<ReaderLevelResult | null>(null)
   const [loanApprovalToast, setLoanApprovalToast] = useState<{ loanId: string; bookTitle: string } | null>(null)
   const loanSnapshotTracker = useRef(createLoanSnapshotTracker())
+  const hydratedAuthUidRef = useRef<string | null>(null)
   const profileUid = profile?.uid
   const authUid = authUser?.uid
 
@@ -220,19 +220,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true
-    void completeStudentRedirectSignIn().catch((error) => {
-      if (active) setSyncError(firebaseErrorMessage(error, 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ'))
-    })
-    const unsubscribe = subscribeStudentUser((user) => {
+    const handleStudentUser = (user: User | null) => {
       if (!active) return
       setAuthUser(user)
       if (!user) {
+        hydratedAuthUidRef.current = null
         clearStudentState()
         setLoading(false)
         return
       }
+      if (hydratedAuthUidRef.current === user.uid) return
+      hydratedAuthUidRef.current = user.uid
       void hydrate(user)
-    }, (error) => {
+    }
+    const unsubscribe = subscribeStudentUser(handleStudentUser, (error) => {
       if (active) {
         setSyncError(firebaseErrorMessage(error, 'ตรวจสอบสถานะบัญชี Google ไม่สำเร็จ'))
         setLoading(false)
@@ -337,11 +338,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSyncing(true)
     setSyncError(null)
     try {
-      await signInStudentWithGoogle()
+      const user = await signInStudentWithGoogle()
+      if (user) {
+        setAuthUser(user)
+        if (hydratedAuthUidRef.current !== user.uid) {
+          hydratedAuthUidRef.current = user.uid
+          await hydrate(user)
+        }
+      }
     } catch (error) {
       const message = firebaseErrorMessage(error, 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ')
       setSyncError(message)
-      throw error
     } finally {
       setSyncing(false)
     }

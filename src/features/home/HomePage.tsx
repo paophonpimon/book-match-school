@@ -64,10 +64,15 @@ export function HomePage() {
           <p className="home-hero__greeting">สวัสดี {displayName} 👋</p>
           <h1>วันนี้หัวใจอยาก<br /><em>เปิดอ่านเรื่องอะไร?</em></h1>
           <p className="home-hero__announcement">{settings.announcement}</p>
-          <Link className="home-hero__button" to="/mood">
-            <Sparkles aria-hidden="true" />
-            <span>เริ่มปัดหาเล่ม</span>
-          </Link>
+          <div className="home-hero__cta">
+            <Link className="home-hero__button" to="/mood">
+              <Sparkles aria-hidden="true" />
+              <span>เริ่มปัดหาเล่ม</span>
+              <ArrowRight className="home-hero__button-arrow" aria-hidden="true" />
+            </Link>
+            <span className="home-hero__cta-spark home-hero__cta-spark--one" aria-hidden="true">✦</span>
+            <span className="home-hero__cta-spark home-hero__cta-spark--two" aria-hidden="true">✧</span>
+          </div>
         </div>
         <img
           className="home-hero__art"

@@ -4,8 +4,6 @@ export interface GoogleSignInEnvironment {
   coarsePointer: boolean
 }
 
-const mobileOrInAppBrowserPattern = /Android|iPhone|iPad|iPod|Mobile|FBAN|FBAV|FB_IAB|Instagram|Line\/|GSA\//i
-
 export function getGoogleSignInEnvironment(): GoogleSignInEnvironment {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') {
     return { userAgent: '', maxTouchPoints: 0, coarsePointer: false }
@@ -21,10 +19,8 @@ export function getGoogleSignInEnvironment(): GoogleSignInEnvironment {
 export function shouldUseGoogleSignInRedirect(
   environment: GoogleSignInEnvironment = getGoogleSignInEnvironment(),
 ) {
-  if (mobileOrInAppBrowserPattern.test(environment.userAgent)) return true
-
-  // iPadOS can identify itself as macOS when the browser requests a desktop site.
-  if (/Macintosh/i.test(environment.userAgent) && environment.maxTouchPoints > 1) return true
-
-  return environment.coarsePointer && environment.maxTouchPoints > 0
+  void environment
+  // Popup sign-in keeps Firebase Auth on one session. Redirect sign-in can lose
+  // its result when web.app and firebaseapp.com storage are partitioned.
+  return false
 }
