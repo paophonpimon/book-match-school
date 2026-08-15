@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 import { test, expect } from '@playwright/test'
 import { ACCEPTANCE_PROJECT_ID, TERM_ID, accounts, bookIds } from '../fixtures'
 import { readManifest, type FixtureManifest } from '../helpers'
@@ -18,9 +18,9 @@ function requestPayload(uid: string, studentId: string, loanId: string, bookId: 
     studentDisplayName: 'E2E studentA', studentFirstName: 'นักเรียน', studentLastName: 'ทดสอบ studentA',
     studentClassroom: 'ม.5/1', studentNumber: studentId.slice(-2), studentId,
     bookTitle: `หนังสือทดสอบ E2E ${index + 1}`, bookAuthor: `ผู้แต่ง TEST ${index + 1}`,
-    bookCoverUrl: index === 8 ? 'http://127.0.0.1:4173/e2e-cover-error.png'
-      : index === 9 ? 'http://127.0.0.1:4173/e2e-cover-slow.png'
-        : index === 11 ? '' : 'http://127.0.0.1:4173/acceptance-cover.svg',
+    bookCoverUrl: index === 8 ? 'http://127.0.0.1:4174/e2e-cover-error.png'
+      : index === 9 ? 'http://127.0.0.1:4174/e2e-cover-slow.png'
+        : index === 11 ? '' : 'http://127.0.0.1:4174/acceptance-cover.svg',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastAuditId: loanId,
   }
 }
@@ -134,6 +134,16 @@ test.describe.serial('Firestore Rules acceptance', () => {
   test('missing membership and suspended member are denied', async () => {
     await assertFails(createRequest('studentNew', bookIds[1], 'E2E-DENY-NO-MEMBER'))
     await assertFails(createRequest('suspended', bookIds[2], 'E2E-DENY-SUSPENDED'))
+  })
+
+  test('students cannot edit roster directory or create a new membership', async () => {
+    const user = manifest.users.studentNew
+    const db = environment.authenticatedContext(user.uid, { email: user.email, email_verified: true }).firestore()
+    await assertFails(updateDoc(doc(db, 'studentDirectory', user.studentId), { firstName: 'แก้เองไม่ได้' }))
+    await assertFails(setDoc(doc(db, 'studentMemberships', '98888'), {
+      studentId: '98888', uid: user.uid, email: user.email, status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }))
   })
 
   test('hidden book and duplicate active request are denied', async () => {

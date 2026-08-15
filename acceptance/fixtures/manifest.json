@@ -1,36 +1,36 @@
 {
   "projectId": "demo-book-match-acceptance",
   "termId": "2999-1",
-  "generatedAt": "2026-07-31T20:38:23.443Z",
+  "generatedAt": "2026-08-15T17:13:51.365Z",
   "users": {
     "admin": {
-      "uid": "2XEyZOcrLTSSKL2O7qqz3ylxe43V",
+      "uid": "Tuyb2WW4Zap8XwF1ScQ3bLhlodLC",
       "email": "paopornpimon@gmail.com",
       "studentId": ""
     },
     "studentA": {
-      "uid": "ozVQe8wMB1npCnbqvhqcE8iNIYXw",
+      "uid": "3EHSVxtbG2tgD5iGhTm8dUdBINs0",
       "email": "student-a@test.book-match.invalid",
       "studentId": "99001"
     },
     "studentB": {
-      "uid": "oXTIFV82QqC7WyqyAiQAT4eQMapJ",
+      "uid": "CvWsMMzhYfgc8NtxuoG5oHh0rj1Y",
       "email": "student-b@test.book-match.invalid",
       "studentId": "99002"
     },
     "studentC": {
-      "uid": "nUS7a2WFo7jzGTHXBqAbeEr8XPNG",
+      "uid": "6VqYDHBx8Oe2eYJA2L4NtuDKTlpA",
       "email": "student-c@test.book-match.invalid",
       "studentId": "99003"
     },
     "suspended": {
-      "uid": "PsyZuoHwvkYVAPgI5czNq7igT9Sm",
+      "uid": "HjqFt1jmfe5N31ctMQlPagdoCFnV",
       "email": "student-suspended@test.book-match.invalid",
       "studentId": "99004"
     },
     "studentNew": {
-      "uid": "mk2nKBykWZoSg28HNfs79HlZ2iIH",
-      "email": "student-new@test.book-match.invalid",
+      "uid": "i7iMcSfpJwhII2BGX4OyEzG3NMtd",
+      "email": "99005@student.bookmatch.local",
       "studentId": "99005"
     }
   },

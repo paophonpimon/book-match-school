@@ -34,27 +34,24 @@ test.describe.serial('Book Match browser acceptance', () => {
   })
   test.afterAll(async () => environment.cleanup())
 
-  test('new verified student is routed to setup and can edit every first-registration field', async ({ page }) => {
+  test('provisioned student is routed to setup and edits only avatar and nickname', async ({ page }) => {
     await signInStudent(page, 'studentNew')
     await expect(page).toHaveURL(/\/setup$/)
-    const studentId = page.getByLabel('เลขประจำตัวนักเรียน')
-    await expect(studentId).toBeEditable()
-    await studentId.fill('123')
-    await studentId.press('ControlOrMeta+A')
-    await studentId.press('Backspace')
-    await studentId.fill(accounts.studentNew.studentId)
-    await page.getByLabel('ชื่อ', { exact: true }).fill('ใหม่')
-    await page.getByLabel('นามสกุล').fill('ทดสอบ')
-    await page.getByLabel('ชั้นมัธยมศึกษา/ห้อง').fill('5/5')
-    await page.getByLabel('เลขที่').fill('5')
+    await environment.withSecurityRulesDisabled(async (context) => {
+      expect((await getDoc(doc(context.firestore(), 'progress', `${TERM_ID}_${manifest.users.studentNew.uid}`))).exists()).toBe(false)
+    })
+    await expect(page.getByLabel('ข้อมูลทะเบียนนักเรียน')).toContainText('99005')
+    await expect(page.getByLabel('ข้อมูลทะเบียนนักเรียน')).toContainText('ใหม่ ทดสอบ')
+    await page.getByRole('button', { name: 'อวตารแบบที่ 1', exact: true }).click()
     await page.getByLabel('ชื่อเล่น/ชื่อที่จะแสดง').fill('E2E นักอ่านใหม่')
-    await page.getByRole('button', { name: /ไปเลือกอารมณ์/ }).click()
+    await page.getByRole('button', { name: /เริ่มใช้งาน Book Match/ }).click()
     await expect(page).toHaveURL(/\/mood$/)
     await environment.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore()
       expect((await getDoc(doc(db, 'profiles', manifest.users.studentNew.uid))).data()?.studentId).toBe('99005')
       expect((await getDoc(doc(db, 'studentMemberships', '99005'))).data()?.uid).toBe(manifest.users.studentNew.uid)
       expect((await getDoc(doc(db, 'studentMembershipUids', manifest.users.studentNew.uid))).data()?.studentId).toBe('99005')
+      expect((await getDoc(doc(db, 'progress', `${TERM_ID}_${manifest.users.studentNew.uid}`))).exists()).toBe(true)
     })
   })
 

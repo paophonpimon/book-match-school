@@ -20,6 +20,7 @@ export async function signInStudent(page: Page, account: keyof typeof accounts) 
   await page.evaluate(async ({ email, password }) => {
     await window.__BOOK_MATCH_ACCEPTANCE__!.signInStudent(email, password)
   }, { email: accounts[account].email, password: ACCEPTANCE_PASSWORD })
+  await page.waitForURL(/\/(home|setup)$/)
 }
 
 export async function signInAdmin(page: Page) {

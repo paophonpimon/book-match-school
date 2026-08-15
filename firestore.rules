@@ -93,6 +93,23 @@ service cloud.firestore {
         && getAfter(uidLockPath).data.studentId == request.resource.data.studentId;
     }
 
+    function directoryProfileMatches(uid) {
+      let directoryPath = /databases/$(database)/documents/studentDirectory/$(request.resource.data.studentId);
+      return exists(directoryPath)
+        && get(directoryPath).data.uid == uid
+        && get(directoryPath).data.studentId == request.resource.data.studentId
+        && get(directoryPath).data.firstName == request.resource.data.firstName
+        && get(directoryPath).data.lastName == request.resource.data.lastName
+        && get(directoryPath).data.gradeLevel == request.resource.data.gradeLevel
+        && get(directoryPath).data.className == request.resource.data.className
+        && get(directoryPath).data.studentNumber == request.resource.data.studentNumber;
+    }
+
+    function officialProfileFieldsAreAllowed(uid) {
+      let directoryPath = /databases/$(database)/documents/studentDirectory/$(request.resource.data.studentId);
+      return !exists(directoryPath) || directoryProfileMatches(uid);
+    }
+
     function studentIdIsImmutableOrLegacyUpgrade() {
       let previousStudentId = resource.data.get('studentId', '');
       return previousStudentId == ''
@@ -106,6 +123,7 @@ service cloud.firestore {
         && validProfile(uid)
         && request.resource.data.createdAt == request.time
         && request.resource.data.lastActiveAt == request.time
+        && directoryProfileMatches(uid)
         && profileMembershipMatches(uid);
       allow update: if owns(uid)
         && validProfile(uid)
@@ -114,6 +132,7 @@ service cloud.firestore {
         // studentId. They may set it once, atomically with membership + UID lock.
         && studentIdIsImmutableOrLegacyUpgrade()
         && request.resource.data.lastActiveAt == request.time
+        && officialProfileFieldsAreAllowed(uid)
         && profileMembershipMatches(uid);
       allow delete: if false;
     }
@@ -147,9 +166,9 @@ service cloud.firestore {
           && (!exists(/databases/$(database)/documents/studentMemberships/$(studentId))
             || resource.data.uid == request.auth.uid));
       allow list: if isAdmin();
-      allow create: if hasVerifiedEmail()
-        && validMembership(studentId)
-        && membershipUidLockMatches(studentId);
+      // Memberships are provisioned by the trusted local Admin import only.
+      // Student clients, including new Google users, cannot self-register.
+      allow create: if false;
       allow update: if isAdmin()
         && request.resource.data.keys().hasOnly([
           'studentId', 'uid', 'email', 'status', 'createdAt', 'updatedAt'
@@ -169,17 +188,17 @@ service cloud.firestore {
     match /studentMembershipUids/{uid} {
       allow get: if owns(uid) || isAdmin();
       allow list: if isAdmin();
-      allow create: if hasVerifiedEmail()
-        && owns(uid)
-        && request.resource.data.keys().hasOnly([
-          'uid', 'studentId', 'email', 'createdAt', 'updatedAt'
-        ])
-        && request.resource.data.uid == uid
-        && request.resource.data.studentId.matches('^[0-9]{3,20}$')
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
+      allow create: if false;
       allow update, delete: if false;
+    }
+
+    match /studentDirectory/{studentId} {
+      allow get: if isAdmin()
+        || (signedIn()
+          && exists(/databases/$(database)/documents/studentMemberships/$(studentId))
+          && get(/databases/$(database)/documents/studentMemberships/$(studentId)).data.uid == request.auth.uid);
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     function validLoanForReading(uid, termId, bookId, loanId) {

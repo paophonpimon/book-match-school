@@ -22,3 +22,9 @@ secrets/
 *serviceAccount*.json
 *.pem
 *.key
+
+# Local student roster imports and reports contain personal data.
+*student-roster*.csv
+*student-roster*.xlsx
+*student-roster*.xls
+*provision-report*.json

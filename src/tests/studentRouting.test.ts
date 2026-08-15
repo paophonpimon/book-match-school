@@ -6,8 +6,8 @@ import { resolve } from 'node:path'
 const setupPage = readFileSync(resolve(process.cwd(), 'src/features/onboarding/ProfileSetupPage.tsx'), 'utf8')
 const pageHeader = readFileSync(resolve(process.cwd(), 'src/components/PageHeader.tsx'), 'utf8')
 
-describe('student Google Sign-In routing', () => {
-  it('keeps a signed-out visitor on the Google login screen', () => {
+describe('student account routing', () => {
+  it('keeps a signed-out visitor on the login screen', () => {
     expect(getStudentEntryRoute({ loading: false, signedIn: false, hasActiveTerm: false, hasProfile: false })).toBe('welcome')
   })
 
@@ -15,7 +15,7 @@ describe('student Google Sign-In routing', () => {
     expect(getStudentEntryRoute({ loading: false, signedIn: true, hasActiveTerm: true, hasProfile: true })).toBe('home')
   })
 
-  it('routes a new Google user to profile setup', () => {
+  it('routes a signed-in account without a profile to setup validation', () => {
     expect(getStudentEntryRoute({ loading: false, signedIn: true, hasActiveTerm: true, hasProfile: false })).toBe('setup')
   })
 
@@ -23,11 +23,11 @@ describe('student Google Sign-In routing', () => {
     expect(getStudentEntryRoute({ loading: false, signedIn: true, hasActiveTerm: false, hasProfile: false })).toBe('maintenance')
   })
 
-  it('lets a new Google user cancel onboarding and return to account selection', () => {
+  it('lets an account cancel onboarding and return to account selection', () => {
     expect(pageHeader).toContain('if (onBack) onBack(); else navigate(-1)')
     expect(setupPage).toContain('resetDevice()')
     expect(setupPage).toContain("navigate('/welcome', { replace: true })")
-    expect(setupPage).toContain('ยกเลิกและใช้บัญชี Google อื่น')
+    expect(setupPage).toContain('ยกเลิกและเปลี่ยนบัญชี')
   })
 
   it('keeps ordinary back navigation when an existing profile is being edited', () => {

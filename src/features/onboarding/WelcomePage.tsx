@@ -1,4 +1,5 @@
-import { LoaderCircle, ShieldCheck, UserRoundCheck } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { KeyRound, LoaderCircle, ShieldCheck, UserRoundCheck } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { LoadingScreen } from '../../components/AppShell'
@@ -28,7 +29,11 @@ export function WelcomePage() {
     currentTerm,
     currentTermError,
     signInWithGoogle,
+    signInWithStudentId,
   } = useApp()
+  const [studentId, setStudentId] = useState('')
+  const [password, setPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
   const entryRoute = getStudentEntryRoute({
     loading,
     signedIn: Boolean(authUser),
@@ -38,6 +43,17 @@ export function WelcomePage() {
   if (entryRoute === 'loading') return <LoadingScreen />
   if (entryRoute === 'home') return <Navigate to="/home" replace />
   if (entryRoute === 'setup') return <Navigate to="/setup" replace />
+
+  async function submitStudentLogin(event: FormEvent) {
+    event.preventDefault()
+    setLoginError('')
+    try {
+      await signInWithStudentId(studentId, password)
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง')
+    }
+  }
+
   return (
     <main className="welcome-page">
       <div className="welcome-spark welcome-spark--top-left" aria-hidden="true">✦</div>
@@ -60,15 +76,33 @@ export function WelcomePage() {
           <h1>หนังสือที่ใช่<br /><em>สำหรับอารมณ์วันนี้</em></h1>
         </div>
         <div className="welcome-login-panel">
-          <div className="welcome-login-icon" aria-hidden="true"><UserRoundCheck /></div>
-          <p className="welcome-copy">เข้าสู่ระบบเพื่อบันทึกประวัติการอ่าน<br />การยืม และระดับนักอ่าน</p>
-          {(syncError || currentTermError) && <p className="form-error" role="alert">{syncError || currentTermError}</p>}
+          <div className="welcome-login-icon" aria-hidden="true"><KeyRound /></div>
+          <h2>เข้าสู่ Book Match</h2>
+          <p className="welcome-copy">ใช้เลขประจำตัวนักเรียนเพื่อเข้าสู่ระบบ</p>
+          {(loginError || syncError || currentTermError) && <p className="form-error" role="alert">{loginError || syncError || currentTermError}</p>}
           {!authUser && (
-            <button className="button button--primary button--wide welcome-google-button" type="button" onClick={() => void signInWithGoogle()} disabled={syncing}>
-              {syncing ? <><LoaderCircle className="spin" /> กำลังเข้าสู่ระบบ…</> : <><GoogleMark /> เข้าสู่ระบบด้วย Google</>}
-            </button>
+            <>
+              <form className="welcome-student-login" onSubmit={submitStudentLogin} noValidate>
+                <label>
+                  เลขประจำตัวนักเรียน
+                  <input required inputMode="numeric" autoComplete="username" maxLength={6} value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="กรอกเลขประจำตัวนักเรียน" />
+                </label>
+                <label>
+                  รหัสผ่าน
+                  <input required type="password" inputMode="numeric" autoComplete="current-password" maxLength={6} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="กรอกรหัสผ่าน" />
+                </label>
+                <button className="button button--primary button--wide welcome-student-button" type="submit" disabled={syncing}>
+                  {syncing ? <><LoaderCircle className="spin" /> กำลังเข้าสู่ระบบ…</> : <><UserRoundCheck /> เข้าสู่ระบบ</>}
+                </button>
+              </form>
+              <div className="welcome-login-divider"><span>หรือ</span></div>
+              <p className="welcome-legacy-label">สมาชิกเดิมที่เคยสมัครด้วย Google</p>
+              <button className="button button--secondary button--wide welcome-google-button" type="button" onClick={() => void signInWithGoogle()} disabled={syncing}>
+                <GoogleMark /> เข้าสู่ระบบด้วย Google
+              </button>
+            </>
           )}
-          <div className="welcome-note"><ShieldCheck /> <span>ใช้บัญชี Google เดิมทุกครั้ง<br />เพื่อรักษาประวัติการอ่านและการยืม</span></div>
+          <div className="welcome-note"><ShieldCheck /> <span>บัญชีเดิมและประวัติการอ่านของคุณยังคงปลอดภัย</span></div>
         </div>
       </section>
     </main>

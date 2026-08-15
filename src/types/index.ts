@@ -61,6 +61,18 @@ export interface StudentMembership {
   updatedAt: string
 }
 
+export interface StudentDirectoryEntry {
+  studentId: string
+  uid: string
+  firstName: string
+  lastName: string
+  className: string
+  gradeLevel: string
+  studentNumber: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type TermStatus = 'draft' | 'active' | 'closed'
 
 export interface AcademicTerm {

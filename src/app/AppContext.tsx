@@ -16,6 +16,7 @@ import {
   saveSavedBookRemote,
   saveUserBookRemote,
   signInStudentWithGoogle,
+  signInStudentWithId,
   signOutStudentUser,
   subscribeStudentUser,
 } from '../services/firebase'
@@ -36,6 +37,7 @@ import type {
   ReaderStats,
   Settings,
   StudentMembership,
+  StudentDirectoryEntry,
   SwipeAction,
   SwipeHistoryItem,
   UserBook,
@@ -53,6 +55,7 @@ interface AppState {
   authUser: User | null
   profile: Profile | null
   membership: StudentMembership | null
+  studentDirectory: StudentDirectoryEntry | null
   readerStats: ReaderStats
   userBooks: Record<string, UserBook>
   loans: Loan[]
@@ -70,6 +73,7 @@ interface AppState {
   levelUp: ReaderLevelResult | null
   loanApprovalToast: { loanId: string; bookTitle: string } | null
   signInWithGoogle: () => Promise<void>
+  signInWithStudentId: (studentId: string, password: string) => Promise<void>
   setSelectedMoods: (moods: string[]) => void
   setSelectedCategories: (ids: string[]) => void
   saveProfile: (profile: Omit<Profile, 'uid' | 'createdAt' | 'lastActiveAt'>) => Promise<void>
@@ -122,6 +126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [membership, setMembership] = useState<StudentMembership | null>(null)
+  const [studentDirectory, setStudentDirectory] = useState<StudentDirectoryEntry | null>(null)
   const [readerStats, setReaderStats] = useState<ReaderStats>(emptyReaderStats)
   const [userBooks, setUserBooks] = useState<Record<string, UserBook>>({})
   const [loans, setLoans] = useState<Loan[]>([])
@@ -168,6 +173,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearStudentState = useCallback(() => {
     setProfile(null)
     setMembership(null)
+    setStudentDirectory(null)
     setReaderStats(emptyReaderStats)
     setUserBooks({})
     setReaders([])
@@ -203,6 +209,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       applyCatalog(catalog, term)
       setProfile(student.profile)
       setMembership(student.membership)
+      setStudentDirectory(student.directory)
       setReaderStats(student.readerStats)
       setUserBooks(student.userBooks)
       setReaders(nextReaders)
@@ -354,16 +361,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const signInWithStudentId = async (studentId: string, password: string) => {
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const user = await signInStudentWithId(studentId, password)
+      setAuthUser(user)
+      if (hydratedAuthUidRef.current !== user.uid) {
+        hydratedAuthUidRef.current = user.uid
+        await hydrate(user)
+      }
+    } catch (error) {
+      setSyncError(firebaseErrorMessage(error, 'เข้าสู่ระบบด้วยเลขประจำตัวนักเรียนไม่สำเร็จ'))
+      throw error
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const saveProfile = async (values: Omit<Profile, 'uid' | 'createdAt' | 'lastActiveAt'>) => {
-    if (!authUser) throw new Error('กรุณาเข้าสู่ระบบด้วย Google ก่อน')
+    if (!authUser) throw new Error('กรุณาเข้าสู่ระบบบัญชีนักเรียนก่อน')
     if (!currentTerm) throw new Error('ยังไม่ได้ตั้งค่าภาคเรียนปัจจุบัน')
+    if (!profile && !studentDirectory) {
+      throw new Error('บัญชี Google นี้ยังไม่เคยเป็นสมาชิก Book Match กรุณาเข้าสู่ระบบด้วยเลขประจำตัวนักเรียน')
+    }
+    const officialValues = studentDirectory ? {
+      ...values,
+      studentId: studentDirectory.studentId,
+      firstName: studentDirectory.firstName,
+      lastName: studentDirectory.lastName,
+      gradeLevel: studentDirectory.gradeLevel,
+      className: studentDirectory.className,
+      studentNumber: studentDirectory.studentNumber,
+    } : values
     const validationError = validateStudentProfile({
-      studentId: values.studentId ?? '',
-      firstName: values.firstName ?? '',
-      lastName: values.lastName ?? '',
-      gradeLevel: values.gradeLevel ?? '',
-      studentNumber: values.studentNumber,
-      displayName: values.displayName,
+      studentId: officialValues.studentId ?? '',
+      firstName: officialValues.firstName ?? '',
+      lastName: officialValues.lastName ?? '',
+      gradeLevel: officialValues.gradeLevel ?? '',
+      studentNumber: officialValues.studentNumber,
+      displayName: officialValues.displayName,
     })
     if (validationError) throw new Error(validationError)
     setSyncing(true)
@@ -371,7 +408,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const now = new Date().toISOString()
       const next: Profile = {
-        ...values,
+        ...officialValues,
         uid: authUser.uid,
         createdAt: profile?.createdAt ?? now,
         lastActiveAt: now,
@@ -380,6 +417,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const remote = await loadRemoteStudentState(authUser, currentTerm.id)
       setProfile(remote.profile)
       setMembership(remote.membership)
+      setStudentDirectory(remote.directory)
       setReaderStats(remote.readerStats)
       setUserBooks(remote.userBooks)
       await refreshReaders()
@@ -635,6 +673,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authUser,
     profile,
     membership,
+    studentDirectory,
     readerStats,
     userBooks,
     loans,
@@ -652,6 +691,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     levelUp,
     loanApprovalToast,
     signInWithGoogle,
+    signInWithStudentId,
     setSelectedMoods,
     setSelectedCategories,
     saveProfile,

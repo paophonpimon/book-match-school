@@ -55,9 +55,9 @@ describe('student profile avatars', () => {
     expect(rules).toContain("'avatarId', 'firstName', 'lastName', 'displayName', 'className'")
   })
 
-  it('distinguishes an existing-profile Rules mismatch from duplicate registration', () => {
-    expect(firebase).toContain("operation: editingExistingProfile ? 'update-student-profile' : 'register-student-membership'")
+  it('distinguishes an existing-profile Rules mismatch from first activation', () => {
+    expect(firebase).toContain("operation: editingExistingProfile ? 'update-student-profile' : 'activate-provisioned-student'")
     expect(firebase).toContain('แก้ไขโปรไฟล์ไม่สำเร็จ: ระบบ Firestore ยังไม่อนุญาตข้อมูลโปรไฟล์รูปแบบล่าสุด')
-    expect(firebase).toContain('ไม่สามารถใช้เลขประจำตัวนักเรียนนี้ได้ อาจมีบัญชีสมาชิกลงทะเบียนเลขนี้ไว้แล้ว')
+    expect(firebase).toContain('เปิดใช้งานบัญชีนักเรียนไม่สำเร็จ กรุณาติดต่อบรรณารักษ์')
   })
 })

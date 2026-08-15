@@ -50,10 +50,23 @@ export default async function globalSetup() {
     })
 
     for (const [key, user] of Object.entries(users)) {
-      if (key === 'admin' || key === 'studentNew') continue
+      if (key === 'admin') continue
       const status = key === 'suspended' ? 'suspended' : 'active'
+      if (key === 'studentNew') {
+        await setDoc(doc(db, 'studentMemberships', user.studentId), {
+          studentId: user.studentId, uid: user.uid, email: user.email, status: 'active', createdAt: now, updatedAt: now,
+        })
+        await setDoc(doc(db, 'studentMembershipUids', user.uid), {
+          uid: user.uid, studentId: user.studentId, email: user.email, createdAt: now, updatedAt: now,
+        })
+        await setDoc(doc(db, 'studentDirectory', user.studentId), {
+          studentId: user.studentId, uid: user.uid, firstName: 'ใหม่', lastName: 'ทดสอบ',
+          gradeLevel: '5/5', className: 'ม.5/5', studentNumber: '5', createdAt: now, updatedAt: now,
+        })
+        continue
+      }
       const profile = {
-        uid: user.uid, studentId: user.studentId, displayName: `E2E ${key}`,
+        uid: user.uid, avatarId: 'avatar-boy-01', studentId: user.studentId, displayName: `E2E ${key}`,
         firstName: 'นักเรียน', lastName: `ทดสอบ ${key}`, gradeLevel: '5/1', className: 'ม.5/1',
         studentNumber: user.studentId.slice(-2), interests: ['learn'], createdAt: now, lastActiveAt: now,
       }
@@ -65,7 +78,8 @@ export default async function globalSetup() {
         uid: user.uid, studentId: user.studentId, email: user.email, createdAt: now, updatedAt: now,
       })
       await setDoc(doc(db, 'progress', `${TERM_ID}_${user.uid}`), {
-        uid: user.uid, termId: TERM_ID, displayName: profile.displayName, className: profile.className,
+        uid: user.uid, termId: TERM_ID, avatarId: profile.avatarId, firstName: profile.firstName,
+        lastName: profile.lastName, displayName: profile.displayName, className: profile.className,
         readCount: 0, likedCount: 0, eligible: true, lastReadAt: null, updatedAt: now,
       })
       await setDoc(doc(db, 'readerStats', user.uid), {
@@ -75,9 +89,9 @@ export default async function globalSetup() {
 
     for (const [index, id] of bookIds.entries()) {
       const active = index !== 10
-      const coverUrl = index === 8 ? 'http://127.0.0.1:4173/e2e-cover-error.png'
-        : index === 9 ? 'http://127.0.0.1:4173/e2e-cover-slow.png'
-          : index === 11 ? '' : 'http://127.0.0.1:4173/acceptance-cover.svg'
+      const coverUrl = index === 8 ? 'http://127.0.0.1:4174/e2e-cover-error.png'
+        : index === 9 ? 'http://127.0.0.1:4174/e2e-cover-slow.png'
+          : index === 11 ? '' : 'http://127.0.0.1:4174/acceptance-cover.svg'
       await setDoc(doc(db, 'books', id), {
         id, title: `หนังสือทดสอบ E2E ${index + 1}`, author: `ผู้แต่ง TEST ${index + 1}`,
         categoryCode: `${(index % 10) * 100}`.padStart(3, '0'), category: `หมวด E2E ${index % 4}`,

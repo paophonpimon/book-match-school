@@ -7,6 +7,7 @@ import {
   linkWithPopup,
   onAuthStateChanged,
   setPersistence,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
   type Auth,
@@ -37,12 +38,13 @@ import type {
   Reader,
   ReaderStats,
   StudentMembership,
+  StudentDirectoryEntry,
   UserBook,
 } from '../types'
 import { normalizeStudentAvatarId } from '../data/avatars'
 import { applyCompletion, applyStatusTransition, countersForCurrentStatus, emptyBookCounters, planLikeTransaction, planSavedTransaction, type BookCounters } from '../utils/firestoreCounters'
 import { getReaderLevel } from '../utils/readerLevels'
-import { assertMembershipRegistrationAvailable } from '../utils/membership'
+import { studentInternalEmail, validateStudentIdCredentials } from '../utils/studentAuth'
 import { planLifetimeReadCredit } from '../utils/readerStats'
 import { env, firebaseConfigured } from './env'
 import { bookStatsWriteFields, buildUserBookWritePayload, hasExactFields, progressWriteFields, userBookWriteFields } from './firestorePayloads'
@@ -128,6 +130,23 @@ export async function signInStudentWithGoogle() {
   }
 }
 
+export async function signInStudentWithId(studentId: string, password: string) {
+  if (!auth) throw new Error('Firebase Authentication ยังไม่พร้อมใช้งาน')
+  const normalized = validateStudentIdCredentials(studentId, password)
+  await setPersistence(auth, browserLocalPersistence)
+  try {
+    return (await signInWithEmailAndPassword(auth, studentInternalEmail(normalized), `${password}!Bm`)).user
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+    if (code.includes('invalid-credential') || code.includes('user-not-found') || code.includes('wrong-password')) {
+      throw new Error('เลขประจำตัวนักเรียนหรือรหัสผ่านไม่ถูกต้อง')
+    }
+    if (code.includes('user-disabled')) throw new Error('บัญชีนี้ถูกระงับ กรุณาติดต่อบรรณารักษ์')
+    if (code.includes('too-many-requests')) throw new Error('ลองเข้าสู่ระบบหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่')
+    throw error
+  }
+}
+
 export async function signOutStudentUser() {
   if (!auth) return
   await signOut(auth)
@@ -161,11 +180,25 @@ function requireFirestore() {
 
 function verifiedStudentUser() {
   const user = auth?.currentUser
-  if (!user) throw new Error('กรุณาเข้าสู่ระบบด้วย Google ก่อน')
+  if (!user) throw new Error('กรุณาเข้าสู่ระบบบัญชีนักเรียนก่อน')
   if (!user.email || !user.emailVerified) {
-    throw new Error('บัญชี Google ต้องมีอีเมลที่ยืนยันแล้ว')
+    throw new Error('บัญชีนักเรียนต้องผ่านการยืนยันแล้ว')
   }
   return user
+}
+
+function normalizeStudentDirectory(data: Record<string, unknown>): StudentDirectoryEntry {
+  return {
+    studentId: String(data.studentId ?? ''),
+    uid: String(data.uid ?? ''),
+    firstName: String(data.firstName ?? ''),
+    lastName: String(data.lastName ?? ''),
+    className: String(data.className ?? ''),
+    gradeLevel: String(data.gradeLevel ?? ''),
+    studentNumber: String(data.studentNumber ?? ''),
+    createdAt: asIso(data.createdAt),
+    updatedAt: asIso(data.updatedAt),
+  }
 }
 
 function normalizeMembership(data: Record<string, unknown>): StudentMembership {
@@ -223,93 +256,92 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
   const firestore = requireFirestore()
   const user = verifiedStudentUser()
   await user.getIdToken(true)
-  if (user.uid !== profile.uid) throw new Error('UID ของโปรไฟล์ไม่ตรงกับบัญชี Google')
-  const studentId = profile.studentId?.trim() ?? ''
-  if (!studentId) throw new Error('กรุณาระบุเลขประจำตัวนักเรียน')
+  if (user.uid !== profile.uid) throw new Error('UID ของโปรไฟล์ไม่ตรงกับบัญชีนักเรียน')
   const profileRef = doc(firestore, 'profiles', profile.uid)
   const progressRef = doc(firestore, 'progress', `${termId}_${profile.uid}`)
-  const membershipRef = doc(firestore, 'studentMemberships', studentId)
   const membershipUidRef = doc(firestore, 'studentMembershipUids', profile.uid)
   let editingExistingProfile = false
+  let studentId = profile.studentId?.trim() ?? ''
   try {
     await runTransaction(firestore, async (transaction) => {
-    const [profileSnapshot, progressSnapshot, membershipSnapshot, membershipUidSnapshot] = await Promise.all([
-      transaction.get(profileRef),
-      transaction.get(progressRef),
-      transaction.get(membershipRef),
-      transaction.get(membershipUidRef),
-    ])
-    editingExistingProfile = profileSnapshot.exists()
-    const previousProfile = profileSnapshot.data()
-    const previousStudentId = typeof previousProfile?.studentId === 'string' ? previousProfile.studentId : ''
-    assertMembershipRegistrationAvailable({
-      requestedStudentId: studentId,
-      requestedUid: profile.uid,
-      existingProfileStudentId: previousStudentId || undefined,
-      existingMembershipUid: membershipSnapshot.exists() ? String(membershipSnapshot.data().uid ?? '') : undefined,
-      existingUidLockStudentId: membershipUidSnapshot.exists() ? String(membershipUidSnapshot.data().studentId ?? '') : undefined,
-    })
-    const timestamp = serverTimestamp()
-    if (!membershipUidSnapshot.exists()) {
-      transaction.set(membershipUidRef, {
+      const membershipUidSnapshot = await transaction.get(membershipUidRef)
+      if (!membershipUidSnapshot.exists()) {
+        throw new Error('บัญชี Google นี้ยังไม่เคยเป็นสมาชิก Book Match กรุณาเข้าสู่ระบบด้วยเลขประจำตัวนักเรียน')
+      }
+      studentId = String(membershipUidSnapshot.data().studentId ?? '').trim()
+      if (!studentId) throw new Error('ไม่พบเลขประจำตัวที่ผูกกับบัญชีนี้')
+      const membershipRef = doc(firestore, 'studentMemberships', studentId)
+      const directoryRef = doc(firestore, 'studentDirectory', studentId)
+      const [profileSnapshot, progressSnapshot, membershipSnapshot, directorySnapshot] = await Promise.all([
+        transaction.get(profileRef),
+        transaction.get(progressRef),
+        transaction.get(membershipRef),
+        transaction.get(directoryRef),
+      ])
+      editingExistingProfile = profileSnapshot.exists()
+      const previousProfile = profileSnapshot.data()
+      if (!membershipSnapshot.exists() || String(membershipSnapshot.data().uid ?? '') !== profile.uid) {
+        throw new Error('ข้อมูลสมาชิกไม่สัมพันธ์กับบัญชีนักเรียน กรุณาติดต่อบรรณารักษ์')
+      }
+      if (membershipSnapshot.data().status !== 'active') throw new Error('บัญชีสมาชิกไม่ได้อยู่ในสถานะใช้งาน')
+      if (!editingExistingProfile && !directorySnapshot.exists()) {
+        throw new Error('บัญชี Google นี้ยังไม่เปิดรับสมัครสมาชิกใหม่ กรุณาเข้าสู่ระบบด้วยเลขประจำตัวนักเรียน')
+      }
+      const directory = directorySnapshot.data()
+      if (directory && String(directory.uid ?? '') !== profile.uid) {
+        throw new Error('ข้อมูลทะเบียนนักเรียนไม่สัมพันธ์กับบัญชีนี้')
+      }
+      const official = directory ? {
+        studentId: String(directory.studentId),
+        firstName: String(directory.firstName),
+        lastName: String(directory.lastName),
+        gradeLevel: String(directory.gradeLevel),
+        className: String(directory.className),
+        studentNumber: String(directory.studentNumber),
+      } : {
+        studentId: String(previousProfile?.studentId ?? profile.studentId ?? ''),
+        firstName: String(profile.firstName ?? previousProfile?.firstName ?? ''),
+        lastName: String(profile.lastName ?? previousProfile?.lastName ?? ''),
+        gradeLevel: String(profile.gradeLevel ?? previousProfile?.gradeLevel ?? ''),
+        className: profile.className,
+        studentNumber: profile.studentNumber,
+      }
+      const timestamp = serverTimestamp()
+      transaction.set(profileRef, {
         uid: profile.uid,
-        studentId,
-        email: user.email!.toLocaleLowerCase('en-US'),
-        createdAt: timestamp,
+        avatarId: normalizeStudentAvatarId(profile.avatarId),
+        displayName: profile.displayName,
+        ...official,
+        interests: profile.interests,
+        createdAt: previousProfile?.createdAt ?? timestamp,
+        lastActiveAt: timestamp,
+      })
+      const progress = progressSnapshot.data()
+      transaction.set(progressRef, {
+        uid: profile.uid,
+        termId,
+        avatarId: normalizeStudentAvatarId(profile.avatarId),
+        firstName: official.firstName,
+        lastName: official.lastName,
+        displayName: profile.displayName,
+        className: official.className,
+        readCount: Number(progress?.readCount ?? 0),
+        likedCount: Number(progress?.likedCount ?? 0),
+        eligible: progress?.eligible !== false,
+        lastReadAt: progress?.lastReadAt ?? null,
         updatedAt: timestamp,
       })
-    }
-    if (!membershipSnapshot.exists()) {
-      transaction.set(membershipRef, {
-        studentId,
-        uid: profile.uid,
-        email: user.email!.toLocaleLowerCase('en-US'),
-        status: 'active',
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })
-    }
-    transaction.set(profileRef, {
-      uid: profile.uid,
-      avatarId: normalizeStudentAvatarId(profile.avatarId),
-      displayName: profile.displayName,
-      className: profile.className,
-      studentNumber: profile.studentNumber,
-      ...(profile.studentId && profile.firstName && profile.lastName && profile.gradeLevel ? {
-        studentId: profile.studentId,
-        firstName: profile.firstName,
-        lastName: profile.lastName,
-        gradeLevel: profile.gradeLevel,
-      } : {}),
-      interests: profile.interests,
-      createdAt: previousProfile?.createdAt ?? timestamp,
-      lastActiveAt: timestamp,
-    })
-    const progress = progressSnapshot.data()
-    transaction.set(progressRef, {
-      uid: profile.uid,
-      termId,
-      avatarId: normalizeStudentAvatarId(profile.avatarId),
-      firstName: profile.firstName?.trim() || profile.displayName,
-      lastName: profile.lastName?.trim() || '',
-      displayName: profile.displayName,
-      className: profile.className,
-      readCount: Number(progress?.readCount ?? 0),
-      likedCount: Number(progress?.likedCount ?? 0),
-      eligible: progress?.eligible !== false,
-      lastReadAt: progress?.lastReadAt ?? null,
-      updatedAt: timestamp,
-    })
     })
   } catch (error) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
     console.error('[Firestore] register-student-membership failed', {
       code,
-      operation: editingExistingProfile ? 'update-student-profile' : 'register-student-membership',
+      operation: editingExistingProfile ? 'update-student-profile' : 'activate-provisioned-student',
       paths: [
         `profiles/${profile.uid}`,
-        `studentMemberships/${studentId}`,
         `studentMembershipUids/${profile.uid}`,
+        `studentMemberships/${studentId}`,
+        `studentDirectory/${studentId}`,
         `progress/${termId}_${profile.uid}`,
       ],
     })
@@ -317,7 +349,7 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
       if (editingExistingProfile) {
         throw new Error('แก้ไขโปรไฟล์ไม่สำเร็จ: ระบบ Firestore ยังไม่อนุญาตข้อมูลโปรไฟล์รูปแบบล่าสุด กรุณาติดต่อผู้ดูแลเพื่ออัปเดตกฎความปลอดภัย')
       }
-      throw new Error('ไม่สามารถใช้เลขประจำตัวนักเรียนนี้ได้ อาจมีบัญชีสมาชิกลงทะเบียนเลขนี้ไว้แล้ว กรุณาตรวจเลขอีกครั้งหรือติดต่อผู้ดูแล')
+      throw new Error('เปิดใช้งานบัญชีนักเรียนไม่สำเร็จ กรุณาติดต่อบรรณารักษ์')
     }
     throw error
   }
@@ -326,16 +358,23 @@ export async function saveProfileRemote(profile: Profile, termId: string) {
 export async function loadRemoteStudentState(user: User, termId: string): Promise<{
   profile: Profile | null
   membership: StudentMembership | null
+  directory: StudentDirectoryEntry | null
   readerStats: ReaderStats
   userBooks: Record<string, UserBook>
 }> {
   const firestore = requireFirestore()
-  const profileSnapshot = await getDoc(doc(firestore, 'profiles', user.uid))
+  const [profileSnapshot, membershipUidSnapshot] = await Promise.all([
+    getDoc(doc(firestore, 'profiles', user.uid)),
+    getDoc(doc(firestore, 'studentMembershipUids', user.uid)),
+  ])
   const profileData = profileSnapshot.data()
-  const studentId = typeof profileData?.studentId === 'string' ? profileData.studentId : ''
-  const [booksSnapshot, membershipSnapshot, readerStatsSnapshot] = await Promise.all([
+  const studentId = typeof profileData?.studentId === 'string'
+    ? profileData.studentId
+    : String(membershipUidSnapshot.data()?.studentId ?? '')
+  const [booksSnapshot, membershipSnapshot, directorySnapshot, readerStatsSnapshot] = await Promise.all([
     getDocs(query(collection(firestore, 'userBooks'), where('uid', '==', user.uid))),
     studentId ? getDoc(doc(firestore, 'studentMemberships', studentId)) : Promise.resolve(null),
+    studentId ? getDoc(doc(firestore, 'studentDirectory', studentId)) : Promise.resolve(null),
     getDoc(doc(firestore, 'readerStats', user.uid)),
   ])
   const profile: Profile | null = profileData ? {
@@ -378,6 +417,7 @@ export async function loadRemoteStudentState(user: User, termId: string): Promis
   return {
     profile,
     membership: membershipSnapshot?.exists() ? normalizeMembership(membershipSnapshot.data()) : null,
+    directory: directorySnapshot?.exists() ? normalizeStudentDirectory(directorySnapshot.data()) : null,
     readerStats: normalizeReaderStats(user.uid, readerStatsSnapshot.data()),
     userBooks,
   }
