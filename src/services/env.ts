@@ -1,3 +1,5 @@
+import { resolveFirebaseAuthDomain } from './firebaseAuthDomain'
+
 const firebaseKeys = [
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',
@@ -10,7 +12,10 @@ const firebaseKeys = [
 export const env = {
   firebase: {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    authDomain: resolveFirebaseAuthDomain(
+      import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+      typeof window === 'undefined' ? undefined : window.location.hostname,
+    ),
     projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
     storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,

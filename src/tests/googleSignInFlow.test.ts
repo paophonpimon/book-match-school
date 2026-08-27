@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { shouldUseGoogleSignInRedirect, type GoogleSignInEnvironment } from '../utils/googleSignInFlow'
+import { resolveFirebaseAuthDomain } from '../services/firebaseAuthDomain'
 
 const firebaseService = readFileSync(resolve(process.cwd(), 'src/services/firebase.ts'), 'utf8')
-const productionEnv = readFileSync(resolve(process.cwd(), '.env.production'), 'utf8')
+const adminAuthService = readFileSync(resolve(process.cwd(), 'src/services/adminAuth.ts'), 'utf8')
+const envService = readFileSync(resolve(process.cwd(), 'src/services/env.ts'), 'utf8')
 
 const desktopEnvironment: GoogleSignInEnvironment = {
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0 Safari/537.36',
@@ -16,13 +18,31 @@ describe('Google student sign-in flow', () => {
   it('uses popup authentication without a redirect fallback', () => {
     expect(firebaseService).toContain('signInWithPopup')
     expect(firebaseService).toContain('linkWithPopup')
-    expect(firebaseService).not.toContain('signInWithRedirect')
-    expect(firebaseService).not.toContain('linkWithRedirect')
-    expect(firebaseService).not.toContain('getRedirectResult')
+    expect(adminAuthService).toContain('signInWithPopup')
+    for (const service of [firebaseService, adminAuthService]) {
+      expect(service).not.toContain('signInWithRedirect')
+      expect(service).not.toContain('linkWithRedirect')
+      expect(service).not.toContain('getRedirectResult')
+    }
   })
 
-  it('keeps the production auth helper on the same Firebase Hosting origin', () => {
-    expect(productionEnv).toContain('VITE_FIREBASE_AUTH_DOMAIN=book-match-school.web.app')
+  it.each([
+    'book-match-school.web.app',
+    'book-match-school.firebaseapp.com',
+  ])('keeps the production auth helper on the current Firebase Hosting origin: %s', (hostname) => {
+    expect(resolveFirebaseAuthDomain('configured-project.firebaseapp.com', hostname)).toBe(hostname)
+    expect(envService).toContain('authDomain: resolveFirebaseAuthDomain(')
+    expect(envService).toContain('window.location.hostname')
+  })
+
+  it.each([
+    'localhost',
+    '127.0.0.1',
+    'preview.example.test',
+    undefined,
+  ])('preserves the configured authDomain outside production Hosting: %s', (hostname) => {
+    expect(resolveFirebaseAuthDomain('configured-project.firebaseapp.com', hostname))
+      .toBe('configured-project.firebaseapp.com')
   })
 
   it('keeps a closing Firebase popup on desktop browsers', () => {
