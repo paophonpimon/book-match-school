@@ -45,6 +45,7 @@ import type {
 import { normalizeStudentAvatarId } from '../data/avatars'
 import { applyCompletion, applyStatusTransition, countersForCurrentStatus, emptyBookCounters, planLikeTransaction, planSavedTransaction, type BookCounters } from '../utils/firestoreCounters'
 import { getReaderLevel } from '../utils/readerLevels'
+import { normalizeLegacyBorrowFields } from '../utils/legacyBorrowCounts'
 import { studentFirebasePassword, studentInternalEmail, validateStudentIdCredentials } from '../utils/studentAuth'
 import { planLifetimeReadCredit } from '../utils/readerStats'
 import { env, firebaseConfigured } from './env'
@@ -436,7 +437,11 @@ export async function loadRemoteStudentState(user: User, termId: string): Promis
 
 export async function loadReadersRemote(termId: string): Promise<Reader[]> {
   const firestore = requireFirestore()
-  const snapshot = await getDocs(query(collection(firestore, 'progress'), where('termId', '==', termId)))
+  const [snapshot, borrowStatsSnapshot] = await Promise.all([
+    getDocs(query(collection(firestore, 'progress'), where('termId', '==', termId))),
+    getDocs(collection(firestore, 'studentBorrowStats')),
+  ])
+  const borrowStatsByUid = new Map(borrowStatsSnapshot.docs.map((item) => [item.id, normalizeLegacyBorrowFields(item.data())]))
   return snapshot.docs.map((item) => {
     const data = item.data()
     return {
@@ -447,6 +452,7 @@ export async function loadReadersRemote(termId: string): Promise<Reader[]> {
       displayName: String(data.displayName ?? ''),
       className: String(data.className ?? ''),
       readCount: Number(data.readCount ?? 0),
+      ...(borrowStatsByUid.get(String(data.uid)) ?? normalizeLegacyBorrowFields()),
       likedCount: Number(data.likedCount ?? 0),
       eligible: data.eligible !== false,
       lastReadAt: data.lastReadAt ? asIso(data.lastReadAt) : null,

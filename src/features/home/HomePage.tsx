@@ -103,7 +103,7 @@ export function HomePage() {
         <Link to="/leaderboard" className="home-stat-card home-stat-card--blue">
           <img src={`${assetRoot}/leaderboard/rank-trophy.webp`} alt="" aria-hidden="true" loading="lazy" decoding="async" />
           <strong>{myRank}</strong>
-          <span>อันดับของฉัน</span>
+          <span>อันดับยอดยืม</span>
         </Link>
       </section>
 

@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
-import { BookOpen, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Library, Sparkles } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../../app/AppContext'
 import { PageHeader } from '../../components/PageHeader'
 import { studentAvatarSrc } from '../../data/avatars'
 import type { Reader } from '../../types'
+import { bookMatchCompletedReadCount, bookMatchLibraryBorrowCount, cumulativeLibraryBorrowCount, legacyLibraryBorrowCount } from '../../utils/legacyBorrowCounts'
 import { sortLeaderboard } from '../../utils/leaderboard'
 import { isSafeProfileDisplayName } from '../../utils/profile'
-import { getTermReaderRank } from '../../utils/readerLevels'
 
 const leaderboardAssets = '/assets/book-match/leaderboard'
 const READERS_PER_PAGE = 10
@@ -29,6 +29,9 @@ function readerFullName(reader: Pick<Reader, 'firstName' | 'lastName' | 'display
 function PodiumReader({ reader, rank, medal }: { reader: Reader; rank: 1 | 2 | 3; medal: string }) {
   const nickname = readerNickname(reader)
   const fullName = readerFullName(reader)
+  const cumulativeBorrowCount = cumulativeLibraryBorrowCount(reader)
+  const legacyBorrowCount = legacyLibraryBorrowCount(reader)
+  const bookMatchBorrowCount = bookMatchLibraryBorrowCount(reader)
   return (
     <article className={`leaderboard-podium__card leaderboard-podium__card--${rank}`} aria-label={`อันดับ ${rank} ${nickname} ${fullName}`}>
       {rank === 1 && <img className="leaderboard-podium__crown" src={`${leaderboardAssets}/rank-crown.png`} alt="" aria-hidden="true" />}
@@ -40,8 +43,9 @@ function PodiumReader({ reader, rank, medal }: { reader: Reader; rank: 1 | 2 | 3
       <strong className="leaderboard-podium__nickname" title={nickname}>{nickname}</strong>
       <small className="leaderboard-podium__real-name" title={fullName}>{fullName}</small>
       <small className="leaderboard-podium__class">{reader.className}</small>
-      <span>{getTermReaderRank(reader.readCount).name}</span>
-      <b>{reader.readCount} เล่ม</b>
+      <span>อ่านจบใน Book Match {bookMatchCompletedReadCount(reader)} เล่ม</span>
+      <b>ยอดยืมสะสม {cumulativeBorrowCount} เล่ม</b>
+      <small className="leaderboard-podium__legacy">เดิม {legacyBorrowCount} · ผ่าน Book Match {bookMatchBorrowCount}</small>
       {rank === 1 && <img className="leaderboard-podium__winner-base" src={`${leaderboardAssets}/rank-first-place-base.png`} alt="" aria-hidden="true" />}
     </article>
   )
@@ -63,7 +67,7 @@ function EmptyPodiumPlace({ rank, medal }: { rank: 1 | 2 | 3; medal: string }) {
 }
 
 export function LeaderboardPage() {
-  const { readers, profile, userBooks, settings } = useApp()
+  const { readers, profile, userBooks } = useApp()
   const [search] = useSearchParams()
   const [scope, setScope] = useState<'all' | 'class'>('all')
   const [page, setPage] = useState(1)
@@ -72,7 +76,7 @@ export function LeaderboardPage() {
     const safeReaders = readers.filter((reader) => isSafeProfileDisplayName(reader.displayName))
     if (!profile || safeReaders.some((reader) => reader.uid === profile.uid)) return sortLeaderboard(safeReaders)
     const lastReadAt = Object.values(userBooks).filter((item) => item.status === 'read' && item.readAt).map((item) => item.readAt!).sort().at(-1) ?? null
-    return sortLeaderboard([...safeReaders, { uid: profile.uid, avatarId: profile.avatarId, firstName: profile.firstName, lastName: profile.lastName, displayName: profile.displayName, className: profile.className, readCount: myReads, likedCount: 0, eligible: true, lastReadAt }])
+    return sortLeaderboard([...safeReaders, { uid: profile.uid, avatarId: profile.avatarId, firstName: profile.firstName, lastName: profile.lastName, displayName: profile.displayName, className: profile.className, readCount: myReads, legacyBorrowCount: 0, bookMatchBorrowCount: 0, likedCount: 0, eligible: true, lastReadAt }])
   }, [readers, profile, myReads, userBooks])
   const filtered = scope === 'class' ? merged.filter((reader) => reader.className === profile?.className) : merged
   const pageCount = Math.max(1, Math.ceil(filtered.length / READERS_PER_PAGE))
@@ -80,21 +84,24 @@ export function LeaderboardPage() {
   const pageStart = (activePage - 1) * READERS_PER_PAGE
   const visibleReaders = filtered.slice(pageStart, pageStart + READERS_PER_PAGE)
   const myRank = merged.findIndex((reader) => reader.uid === profile?.uid) + 1
+  const myBookCount = merged.find((reader) => reader.uid === profile?.uid)
+  const myDisplayedCount = myBookCount ? cumulativeLibraryBorrowCount(myBookCount) : 0
+  const myCompletedReadCount = myBookCount ? bookMatchCompletedReadCount(myBookCount) : myReads
 
   return (
     <div className="page leaderboard-page">
-      <PageHeader title="อันดับนักอ่าน" />
+      <PageHeader title="อันดับยอดยืม" />
       {search.get('completed') === '1' && <div className="success-banner"><Sparkles /> ยืนยันการอ่านสำเร็จ! เพิ่มอีก 1 เล่มแล้ว</div>}
       <section className="leaderboard-heading">
-        <p className="eyebrow">{settings.termName}</p>
+        <p className="eyebrow">สถิติการยืมห้องสมุดสะสม</p>
         <div className="leaderboard-heading__title">
           <img src={`${leaderboardAssets}/rank-laurel-pair.png`} alt="" aria-hidden="true" />
-          <h1>สุดยอดนักอ่าน</h1>
+          <h1>อันดับยอดยืมสะสม</h1>
         </div>
-        <p>ทุกรีวิวที่ตั้งใจ คืออีกหนึ่งก้าวบนเส้นทางนักอ่าน</p>
+        <p>นับจากยอดยืมเดิม และรายการรับหนังสือผ่าน Book Match หลังวันที่สรุปยอดเดิม</p>
       </section>
 
-      <div className="leaderboard-segment" role="group" aria-label="ขอบเขตอันดับนักอ่าน">
+      <div className="leaderboard-segment" role="group" aria-label="ขอบเขตอันดับยอดยืม">
         <button className={scope === 'all' ? 'active' : ''} type="button" aria-pressed={scope === 'all'} onClick={() => { setScope('all'); setPage(1) }}>อันดับรวม</button>
         <button className={scope === 'class' ? 'active' : ''} type="button" aria-pressed={scope === 'class'} onClick={() => { setScope('class'); setPage(1) }}>ในห้อง {profile?.className}</button>
       </div>
@@ -116,12 +123,15 @@ export function LeaderboardPage() {
             <img src={`${leaderboardAssets}/rank-trophy.png`} alt="" aria-hidden="true" />
             <span><small>อันดับของฉัน</small><strong>{profile ? readerNickname(profile) : ''} · {profile?.className}</strong></span>
             <b>#{myRank || merged.length + 1}</b>
-            <em>{myReads} เล่ม</em>
+            <em>
+              <strong>ยืมหนังสือ {myDisplayedCount} เล่ม</strong>
+              <small>อ่านจบใน Book Match {myCompletedReadCount} เล่ม</small>
+            </em>
           </section>
 
           <section className="leaderboard-table" aria-labelledby="leaderboard-list-title">
             <div className="leaderboard-table__heading">
-              <div><p className="eyebrow">อันดับนักอ่าน</p><h2 id="leaderboard-list-title">รายชื่อนักอ่าน</h2></div>
+              <div><p className="eyebrow">อันดับจากยอดยืมสะสม</p><h2 id="leaderboard-list-title">รายชื่อนักเรียน</h2></div>
               <span>{filtered.length} คน</span>
             </div>
             <div className="ranking-list">
@@ -132,9 +142,10 @@ export function LeaderboardPage() {
                   <div className="ranking-list__reader">
                     <strong>{readerNickname(reader)}</strong>
                     <small className="ranking-list__real-name">{readerFullName(reader)}</small>
-                    <small>{reader.className} · {getTermReaderRank(reader.readCount).name}</small>
+                    <small>{reader.className} · อ่านจบใน Book Match {bookMatchCompletedReadCount(reader)} เล่ม</small>
+                    <small className="ranking-list__legacy">เดิม {legacyLibraryBorrowCount(reader)} · ผ่าน Book Match {bookMatchLibraryBorrowCount(reader)}</small>
                   </div>
-                  <b><BookOpen aria-hidden="true" /> {reader.readCount} <small>เล่ม</small></b>
+                  <b><Library aria-hidden="true" /> {cumulativeLibraryBorrowCount(reader)} <small>เล่มที่ยืม</small></b>
                 </article>
               ))}
             </div>
@@ -163,8 +174,8 @@ export function LeaderboardPage() {
       ) : (
         <section className="leaderboard-empty">
           <img src={`${leaderboardAssets}/rank-trophy.png`} alt="" aria-hidden="true" />
-          <strong>ยังไม่มีอันดับนักอ่าน</strong>
-          <p>{scope === 'class' ? 'ห้องนี้ยังไม่มีข้อมูลการอ่านในภาคเรียนปัจจุบัน' : 'เมื่อมีการอ่านจบ อันดับจะปรากฏที่นี่'}</p>
+          <strong>ยังไม่มีอันดับยอดยืม</strong>
+          <p>{scope === 'class' ? 'ห้องนี้ยังไม่มีข้อมูลการยืมห้องสมุด' : 'เมื่อมีข้อมูลการยืม อันดับจะปรากฏที่นี่'}</p>
         </section>
       )}
     </div>

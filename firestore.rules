@@ -400,6 +400,39 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function validStudentBorrowStats(uid) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'legacyBorrowCount', 'legacyBorrowSource', 'legacyBorrowAsOf',
+          'bookMatchBorrowCount', 'updatedAt'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.legacyBorrowCount is int
+        && request.resource.data.legacyBorrowCount >= 0
+        && request.resource.data.legacyBorrowSource is string
+        && request.resource.data.legacyBorrowSource.size() <= 40
+        && request.resource.data.legacyBorrowAsOf is string
+        && request.resource.data.legacyBorrowAsOf.size() <= 10
+        && request.resource.data.bookMatchBorrowCount is int
+        && request.resource.data.bookMatchBorrowCount >= 0
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    match /studentBorrowStats/{uid} {
+      allow read: if signedIn();
+      allow create: if isAdmin() && validStudentBorrowStats(uid);
+      allow update: if isAdmin()
+        && validStudentBorrowStats(uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.legacyBorrowCount == resource.data.legacyBorrowCount
+        && request.resource.data.legacyBorrowSource == resource.data.legacyBorrowSource
+        && request.resource.data.legacyBorrowAsOf == resource.data.legacyBorrowAsOf
+        && request.resource.data.bookMatchBorrowCount == resource.data.bookMatchBorrowCount + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'bookMatchBorrowCount', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
     function validBookStats(recordId) {
       return request.resource.data.keys().hasOnly([
           'termId', 'bookId', 'likeCount', 'saveCount', 'readingCount', 'readCount',

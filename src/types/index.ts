@@ -142,6 +142,10 @@ export interface Reader {
   displayName: string
   className: string
   readCount: number
+  legacyBorrowCount?: number
+  legacyBorrowSource?: string
+  legacyBorrowAsOf?: string
+  bookMatchBorrowCount?: number
   likedCount: number
   eligible: boolean
   lastReadAt: string | null

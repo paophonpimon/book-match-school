@@ -7,6 +7,7 @@ const adminAuth = readFileSync(resolve(process.cwd(), 'src/services/adminAuth.ts
 const adminPage = readFileSync(resolve(process.cwd(), 'src/features/admin/AdminPage.tsx'), 'utf8')
 const adminLoans = readFileSync(resolve(process.cwd(), 'src/features/admin/AdminLoanManagement.tsx'), 'utf8')
 const firebaseService = readFileSync(resolve(process.cwd(), 'src/services/firebase.ts'), 'utf8')
+const loanService = readFileSync(resolve(process.cwd(), 'src/services/loans.ts'), 'utf8')
 const bookDetail = readFileSync(resolve(process.cwd(), 'src/features/discovery/BookDetailPage.tsx'), 'utf8')
 
 describe('loan Firestore security boundary', () => {
@@ -80,6 +81,18 @@ describe('loan Firestore security boundary', () => {
   it('never permits permanent deletion of loan history', () => {
     const loanBlock = rules.slice(rules.indexOf('match /loans/{loanId}'), rules.indexOf('function validActiveKey'))
     expect(loanBlock).toContain('allow delete: if false')
+  })
+
+  it('increments the canonical borrow stats only inside a successful pickup transaction', () => {
+    const pickupBlock = loanService.slice(loanService.indexOf('export async function pickupLoanAsAdmin'), loanService.indexOf('export async function renewLoanAsAdmin'))
+    expect(pickupBlock).toContain('transaction.get(refs.borrowStatsRef)')
+    expect(pickupBlock).toContain('transaction.set(refs.borrowStatsRef')
+    expect(pickupBlock).toContain('bookMatchBorrowCount: Math.max(0, Number(borrowStats?.bookMatchBorrowCount ?? 0)) + 1')
+    expect(pickupBlock).toContain("if (current.status === 'borrowed'")
+    const statsBlock = rules.slice(rules.indexOf('match /studentBorrowStats/{uid}'), rules.indexOf('function validBookStats'))
+    expect(statsBlock).toContain('allow read: if signedIn()')
+    expect(statsBlock).toContain('request.resource.data.bookMatchBorrowCount == resource.data.bookMatchBorrowCount + 1')
+    expect(statsBlock).toContain('allow delete: if false')
   })
 
   it('requires a matching borrowed or returned loan before reading and review', () => {

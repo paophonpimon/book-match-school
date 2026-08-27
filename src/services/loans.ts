@@ -367,6 +367,7 @@ function adminRefs(firestore: Firestore, loan: Loan) {
     lockRef: doc(firestore, 'bookLoanLocks', loan.bookId),
     auditRef: doc(collection(firestore, 'loanAuditLogs')),
     notificationRef: doc(firestore, 'studentNotifications', loan.id),
+    borrowStatsRef: doc(firestore, 'studentBorrowStats', loan.uid),
   }
 }
 
@@ -387,6 +388,7 @@ function logAdminLoanFailure(
       lock: `bookLoanLocks/${loan.bookId}`,
       auditCollection: 'loanAuditLogs',
       notification: `studentNotifications/${loan.id}`,
+      borrowStats: `studentBorrowStats/${loan.uid}`,
     },
   })
 }
@@ -520,10 +522,11 @@ export async function pickupLoanAsAdmin(loan: Loan, loanDays: number) {
   const refs = adminRefs(firestore, loan)
   const days = normalizeLoanDays(loanDays)
   return runTransaction(firestore, async (transaction) => {
-    const [loanSnapshot, activeSnapshot, lockSnapshot] = await Promise.all([
+    const [loanSnapshot, activeSnapshot, lockSnapshot, borrowStatsSnapshot] = await Promise.all([
       transaction.get(refs.loanRef),
       transaction.get(refs.activeRef),
       transaction.get(refs.lockRef),
+      transaction.get(refs.borrowStatsRef),
     ])
     if (!loanSnapshot.exists()) throw new Error('ไม่พบคำขอยืม')
     const current = normalizeLoanSnapshot(loanSnapshot)
@@ -554,6 +557,15 @@ export async function pickupLoanAsAdmin(loan: Loan, loanDays: number) {
       dueAt,
       updatedAt: timestamp,
       lastAuditId: refs.auditRef.id,
+    })
+    const borrowStats = borrowStatsSnapshot.data()
+    transaction.set(refs.borrowStatsRef, {
+      uid: loan.uid,
+      legacyBorrowCount: Math.max(0, Number(borrowStats?.legacyBorrowCount ?? 0)),
+      legacyBorrowSource: String(borrowStats?.legacyBorrowSource ?? ''),
+      legacyBorrowAsOf: String(borrowStats?.legacyBorrowAsOf ?? ''),
+      bookMatchBorrowCount: Math.max(0, Number(borrowStats?.bookMatchBorrowCount ?? 0)) + 1,
+      updatedAt: timestamp,
     })
     transaction.set(refs.auditRef, auditPayload(
       'pickup', loan.id, loan.bookId, loan.uid, 'approved', 'borrowed',

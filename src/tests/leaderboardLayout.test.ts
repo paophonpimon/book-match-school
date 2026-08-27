@@ -6,9 +6,9 @@ const page = readFileSync(resolve(process.cwd(), 'src/features/leaderboard/Leade
 const css = readFileSync(resolve(process.cwd(), 'src/styles/global.css'), 'utf8')
 
 describe('student leaderboard visual structure', () => {
-  it('uses the shared student header and keeps live term data', () => {
-    expect(page).toContain('<PageHeader title="อันดับนักอ่าน" />')
-    expect(page).toContain('{settings.termName}')
+  it('uses the shared student header and labels cumulative library borrows explicitly', () => {
+    expect(page).toContain('<PageHeader title="อันดับยอดยืม" />')
+    expect(page).toContain('สถิติการยืมห้องสมุดสะสม')
     expect(page).not.toContain('ProgressSteps')
     expect(page).not.toContain('rank-reading-journey.png')
     expect(page).not.toContain('ภาคเรียนที่ 1 ปีการศึกษา 2569')
@@ -49,7 +49,9 @@ describe('student leaderboard visual structure', () => {
     expect(css).toContain('.leaderboard-podium__card--1 .leaderboard-podium__nickname')
     expect(css).toContain('.leaderboard-podium__card--2 .leaderboard-podium__nickname')
     expect(css).toContain('.leaderboard-podium__card--3 .leaderboard-podium__nickname')
-    expect(page).toContain('{reader.readCount} เล่ม')
+    expect(page).toContain('<b>ยอดยืมสะสม {cumulativeBorrowCount} เล่ม</b>')
+    expect(page).toContain('{cumulativeLibraryBorrowCount(reader)} <small>เล่มที่ยืม</small>')
+    expect(page).toContain('อ่านจบใน Book Match {bookMatchCompletedReadCount(reader)} เล่ม')
   })
 
   it('handles fewer than three readers without placeholder students', () => {
@@ -64,7 +66,7 @@ describe('student leaderboard visual structure', () => {
     expect(page).toContain("merged.findIndex((reader) => reader.uid === profile?.uid) + 1")
     expect(page).toContain('className={reader.uid === profile?.uid ? \'current\' : \'\'}')
     expect(page).toContain('aria-label="อันดับของฉัน"')
-    expect(page).toContain('{myReads} เล่ม')
+    expect(page).toContain('ยืมหนังสือ {myDisplayedCount} เล่ม')
   })
 
   it('has scoped mobile and desktop leaderboard treatments', () => {

@@ -375,6 +375,7 @@ textarea { resize: vertical; line-height: 1.6; }
 .leaderboard-podium__card--3 .leaderboard-podium__nickname { color: #a15f3c; }
 .leaderboard-podium__card > small { width: 100%; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; font-size: .62rem; }
 .leaderboard-podium__real-name { margin-top: 3px; color: #766860 !important; font-weight: 400; }
+.leaderboard-podium__legacy { margin-top: 3px; color: #7b7569 !important; font-size: .52rem !important; font-weight: 500; }
 .leaderboard-podium__class { margin-top: 3px; opacity: .86; }
 .leaderboard-podium__card > span { max-width: 100%; margin-top: 8px; padding: 4px 7px; overflow: hidden; color: #7a5b45; border-radius: 999px; background: rgba(255,255,255,.65); text-overflow: ellipsis; white-space: nowrap; font-size: .55rem; font-weight: 700; }
 .leaderboard-podium__card > b { margin-top: 7px; color: #cd4a3e; font-size: .75rem; }
@@ -386,13 +387,13 @@ textarea { resize: vertical; line-height: 1.6; }
 .my-rank > img { width: 56px; height: 56px; object-fit: contain; filter: drop-shadow(0 5px 5px rgba(0,0,0,.2)); }
 .my-rank span { min-width: 0; }.my-rank span small, .my-rank span strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .my-rank span small { color: #efcfb9; font-size: .59rem; }.my-rank span strong { margin-top: 2px; font: 600 .84rem 'Pridi', serif; }
-.my-rank b { font-size: 1.35rem; }.my-rank em { padding-left: 9px; color: #f6d27e; border-left: 1px solid rgba(255,255,255,.28); font-size: .66rem; font-style: normal; font-weight: 800; white-space: nowrap; }
+.my-rank b { font-size: 1.35rem; }.my-rank em { padding-left: 9px; color: #f6d27e; border-left: 1px solid rgba(255,255,255,.28); font-size: .66rem; font-style: normal; font-weight: 800; white-space: nowrap; }.my-rank em strong, .my-rank em small { display: block; }.my-rank em small { margin-top: 2px; color: #efcfb9; font-size: .53rem; font-weight: 500; }
 .leaderboard-table { margin-top: 13px; padding: 14px 12px 12px; border: 1px solid #ead9c9; border-radius: 22px; background: rgba(255,253,248,.88); box-shadow: 0 9px 22px rgba(75,49,33,.07); }
 .leaderboard-table__heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; padding: 1px 5px 9px; }.leaderboard-table__heading p { margin: 0; }.leaderboard-table__heading h2 { margin: 1px 0 0; font: 600 1.08rem 'Pridi', serif; }.leaderboard-table__heading > span { color: var(--muted); font-size: .64rem; font-weight: 700; }
 .ranking-list { display: grid; }.ranking-list article { min-height: 62px; display: grid; grid-template-columns: 30px 40px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px 6px; border-top: 1px solid #eee2d7; }.ranking-list article.current { margin: 0 -4px; padding-left: 10px; padding-right: 10px; border-top-color: transparent; border-radius: 14px; background: linear-gradient(90deg, #fff1e7, #fff9ef); box-shadow: inset 3px 0 #ef6757; }
 .ranking-list__position { color: #705548; text-align: center; font-weight: 800; }.ranking-list__position--1 { color: #d49b1f; }.ranking-list__position--2 { color: #7890a7; }.ranking-list__position--3 { color: #b57651; }
 .reader-avatar--small { width: 40px; height: 40px; margin: 0; border-width: 2px; font-size: .9rem; }
-.ranking-list__reader { min-width: 0; }.ranking-list strong, .ranking-list small { display: block; }.ranking-list strong { overflow: hidden; color: #cf493d; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }.ranking-list small { color: var(--muted); font-size: .59rem; }.ranking-list__real-name { color: #5f514a !important; font-weight: 400; }
+.ranking-list__reader { min-width: 0; }.ranking-list strong, .ranking-list small { display: block; }.ranking-list strong { overflow: hidden; color: #cf493d; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }.ranking-list small { color: var(--muted); font-size: .59rem; }.ranking-list__real-name { color: #5f514a !important; font-weight: 400; }.ranking-list__legacy { color: #71806e !important; }
 .ranking-list article > b { display: flex; align-items: center; gap: 4px; color: #d84c40; font-size: .83rem; white-space: nowrap; }.ranking-list article > b svg { width: 15px; height: 15px; }.ranking-list article > b small { display: inline; color: inherit; }
 .leaderboard-pagination { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee2d7; }
 .leaderboard-pagination__pages { min-width: 0; display: flex; justify-content: center; gap: 6px; overflow-x: auto; padding: 2px; scrollbar-width: none; }.leaderboard-pagination__pages::-webkit-scrollbar { display: none; }
